@@ -289,6 +289,20 @@
   <script type="module">
     import { createClient } from '@supabase/supabase-js';
 
+    // Control de acceso básico — disuasivo para uso interno
+    (function() {
+      const KEY = 'spec_auth';
+      const PWD = 'grupospec2025';
+      if (sessionStorage.getItem(KEY) !== PWD) {
+        const input = prompt('🔒 Grupo SPEC · Operaciones\nContraseña de acceso:');
+        if (input !== PWD) {
+          document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#888">Acceso denegado.</div>';
+          throw new Error('Acceso denegado');
+        }
+        sessionStorage.setItem(KEY, PWD);
+      }
+    })();
+
     // anon key es pública por diseño: RLS en Supabase permite solo SELECT para anon.
     // Escritura solo vía service_role desde n8n. No tratar como secreto.
     const SUPABASE_URL      = 'https://osnttxgmsfudghinxfat.supabase.co';
