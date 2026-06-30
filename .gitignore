@@ -1,0 +1,17 @@
+# Subproyecto OSS independiente con su propio repo
+n8n-mcp/
+
+# Claude Code internals — no subir al repo
+.claude/
+.agents/
+.mcp.json
+skills-lock.json
+
+# Variables de entorno (aunque este proyecto no usa .env, por convención)
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
