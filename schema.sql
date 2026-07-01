@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   team text NOT NULL DEFAULT 'netTime',
   group_name text,
   priority text,
+  nivel_soporte text,
   status text,
   owner text,
   organization text,
@@ -75,6 +76,9 @@ CREATE TABLE IF NOT EXISTS tickets (
   created_at timestamptz,
   updated_at timestamptz DEFAULT now()
 );
+
+-- Migración: agrega nivel_soporte si la tabla ya existía sin esta columna
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS nivel_soporte text;
 
 CREATE TABLE IF NOT EXISTS orders (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
