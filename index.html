@@ -357,10 +357,11 @@
     let activeTicketPeriod  = 'mes';
     let activeTicketNivel   = 'Todos';
     let activeTicketStatus  = 'Todos';
+    let filterTicketClient  = '';
     let filterPedidoClient  = '';
     let nivelTableSort  = {col:'count', dir:-1};
     let estadoTableSort = {col:'count', dir:-1};
-    let D = { projects:[], services:[], installations:[], tickets:[], orders:[], log:[] };
+    let D = { projects:[], installations:[], tickets:[], orders:[], log:[] };
     let sortState = {
       proyectos:     { col: 'progress_pct', dir: -1 },
       pedidos:       { col: 'progress_pct', dir: -1 },
@@ -375,17 +376,16 @@
     // ── CARGA ──────────────────────────────────────────────────────────
     async function loadAll(animated = false) {
       const opts = { ascending: false };
-      const [p,s,i,t,o,l] = await Promise.all([
+      const [p,i,t,o,l] = await Promise.all([
         sb.from('projects').select('*').order('updated_at',opts),
-        sb.from('services').select('*').order('updated_at',opts),
         sb.from('installations').select('*').order('updated_at',opts),
         sb.from('tickets').select('*').order('updated_at',opts),
         sb.from('orders').select('*').order('updated_at',opts),
         sb.from('status_log').select('*').order('created_at',opts).limit(200),
       ]);
-      const err = [p,s,i,t,o,l].find(r => r.error);
+      const err = [p,i,t,o,l].find(r => r.error);
       if (err?.error) { console.error(err.error); showError(err.error.message); return; }
-      D = { projects:p.data||[], services:s.data||[], installations:i.data||[], tickets:t.data||[], orders:o.data||[], log:l.data||[] };
+      D = { projects:p.data||[], installations:i.data||[], tickets:t.data||[], orders:o.data||[], log:l.data||[] };
       render(animated);
     }
 
@@ -402,7 +402,7 @@
     function subscribeRealtime() {
       rtChannels.forEach(c => sb.removeChannel(c));
       rtChannels.length = 0;
-      ['projects','services','installations','tickets','orders','status_log'].forEach(table => {
+      ['projects','installations','tickets','orders','status_log'].forEach(table => {
         const ch = sb.channel(`rt_${table}`)
           .on('postgres_changes', { event:'*', schema:'public', table }, () => loadAll())
           .subscribe(status => {
@@ -430,6 +430,7 @@
       activeSection       = section;
       filterEntity        = '';
       filterClient        = '';
+      filterTicketClient  = '';
       filterPedidoClient  = '';
       activeProjectGroup  = 'Todos';
       activeTicketProduct = 'Todos';
@@ -486,7 +487,7 @@
       }).length;
       const pendInst   = D.installations.filter(i => i.status==='pendiente').length;
       const activeOrds = D.orders.filter(o => o.status !== 'completado' && o.status !== 'cancelado').length;
-      const blocked    = [...D.projects, ...D.services, ...D.installations, ...D.orders].filter(x => x.status==='frenado').length;
+      const blocked    = [...D.projects, ...D.installations, ...D.orders].filter(x => x.status==='frenado').length;
 
       return `
         ${sh('RESUMEN')}
@@ -596,6 +597,7 @@
         : D.projects.filter(p => p.team === activeProjectGroup);
 
       const sorted = sortData(filtered, 'proyectos', 'progress_pct', -1);
+      window._proyectosExportData = sorted;
 
       return `
         ${sh('PROYECTOS')}
@@ -613,6 +615,16 @@
               }).join('')}
             </div>
             <span style="font-size:11px;color:var(--t3)">${filtered.length} mostrados · ${D.projects.length} total</span>
+            <div style="margin-left:auto;display:flex;gap:6px">
+              <button onclick="exportProyectosCSV()" title="Exportar a CSV / Excel" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(16,185,129,0.18)'" onmouseout="this.style.background='rgba(16,185,129,0.08)'">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                CSV
+              </button>
+              <button onclick="exportProyectosPDF()" title="Exportar a PDF / Imprimir" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:#FCA5A5;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(239,68,68,0.18)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                PDF
+              </button>
+            </div>
           </div>
         </div>
         ${filtered.length ? `
@@ -748,22 +760,19 @@
       if(pe) tix=tix.filter(t=>t.created_at&&new Date(t.created_at)<=pe);
       if(activeTicketGroup!=='Todos') tix=tix.filter(t=>ticketProductLabel(t.group_name||t.team)===activeTicketGroup);
 
-      const NIVEL_ORDER=['Nivel 1','Nivel 2','Nivel 3','Nivel 4','Nivel 5','Pedidos'];
-      const allNiveles=['Todos',...[...new Set(tix.map(t=>t.nivel_soporte||'—'))].sort((a,b)=>{
-        const ia=NIVEL_ORDER.indexOf(a), ib=NIVEL_ORDER.indexOf(b);
-        if(ia===-1&&ib===-1) return a.localeCompare(b);
-        if(ia===-1) return 1;
-        if(ib===-1) return -1;
-        return ia-ib;
-      })];
+      const allNiveles=['Todos','Nivel 1','Nivel 2','Nivel 3','Nivel 4','Nivel 5','Pedidos','—'];
       const allStatuses=['Todos',...[...new Set(tix.map(t=>t.status||'—'))].sort()];
-      if(activeTicketNivel!=='Todos') tix=tix.filter(t=>(t.nivel_soporte||'—')===activeTicketNivel);
-      if(activeTicketStatus!=='Todos') tix=tix.filter(t=>(t.status||'—')===activeTicketStatus);
+      const tixNivel  = activeTicketNivel!=='Todos'  ? tix.filter(t=>(t.nivel_soporte||'—')===activeTicketNivel)  : tix;
+      const tixEstado = activeTicketStatus!=='Todos' ? tix.filter(t=>(t.status||'—')===activeTicketStatus) : tix;
 
       const total   =tix.length;
-      const abiertos=tix.filter(t=>STATUS_ABIERTOS.some(s=>(t.status||'').toLowerCase().includes(s))).length;
       const cerrados=tix.filter(t=>{const s=(t.status||'').toLowerCase();return s.includes('cerrad')||s.includes('closed');}).length;
-      const altaPrio=tix.filter(t=>{
+      // abiertos y altaPrio: siempre sobre todos los tickets (sin filtro período) para reflejar estado actual
+      const _allTixGrupo = activeTicketGroup!=='Todos'
+        ? D.tickets.filter(t=>ticketProductLabel(t.group_name||t.team)===activeTicketGroup)
+        : D.tickets;
+      const abiertos=_allTixGrupo.filter(t=>STATUS_ABIERTOS.some(s=>(t.status||'').toLowerCase().includes(s))).length;
+      const altaPrio=_allTixGrupo.filter(t=>{
         const p=(t.priority||'').toLowerCase();
         return (p.startsWith('1')||p.includes('alta')||p.includes('high')||p.includes('urgent'))&&
                STATUS_ABIERTOS.some(s=>(t.status||'').toLowerCase().includes(s));
@@ -784,9 +793,9 @@
           return typeof va==='string'?dir*va.localeCompare(vb):dir*(va-vb);
         });
       }
-      function buildRows(groupFn) {
+      function buildRows(tixSrc, groupFn) {
         const map={};
-        for(const t of tix) {
+        for(const t of tixSrc) {
           const org=(t.organization||t.client||'Sin org').trim().replace(/^\./,'')||'—';
           const grp=groupFn(t); const key=org+'|||'+grp;
           if(!map[key]) map[key]={org,grp,count:0,times:[]};
@@ -795,21 +804,28 @@
         }
         return Object.values(map).map(r=>({...r,avgMs:r.times.length?r.times.reduce((a,b)=>a+b,0)/r.times.length:0}));
       }
-      const nivelRows =sortAnalysis(buildRows(t=>t.nivel_soporte||'—'),nivelTableSort).slice(0,10);
-      const estadoRows=sortAnalysis(buildRows(t=>t.status||'—'),estadoTableSort).slice(0,10);
+      const nivelRows =sortAnalysis(buildRows(tixNivel,  t=>t.nivel_soporte||'—'),nivelTableSort).slice(0,10);
+      const estadoRows=sortAnalysis(buildRows(tixEstado, t=>t.status||'—'),estadoTableSort).slice(0,10);
+      window._nivelExportData  = nivelRows;
+      window._estadoExportData = estadoRows;
       function sortIcon(srt,col){return srt.col===col?(srt.dir===1?'↑':'↓'):'↕';}
 
-      const statusFiltered=D.tickets.filter(t=>STATUS_ABIERTOS.some(s=>(t.status||'').toLowerCase().includes(s)));
+      const _openTix=D.tickets.filter(t=>STATUS_ABIERTOS.some(s=>(t.status||'').toLowerCase().includes(s)));
+      const _tqClient=filterTicketClient.toLowerCase().trim();
+      const statusFiltered=_tqClient
+        ? _openTix.filter(t=>(t.organization||t.client||'').toLowerCase().includes(_tqClient)||(t.title||'').toLowerCase().includes(_tqClient))
+        : _openTix;
       const prodCounts={};
       statusFiltered.forEach(t=>{const p=ticketProductLabel(t.group_name||t.team);prodCounts[p]=(prodCounts[p]||0)+1;});
       const prodTabs=['Todos',...Object.keys(prodCounts).sort()];
       const filtrados=sortData(activeTicketProduct==='Todos'?statusFiltered:statusFiltered.filter(t=>ticketProductLabel(t.group_name||t.team)===activeTicketProduct),'tickets');
-      const TICKET_COLS=[['#','zammad_id'],['Título','title'],['Producto','_product'],['Organización','organization'],['Prioridad','priority'],['Estado','status'],['Propietario','owner'],['Último comentario','last_contact_at']];
+      window._ticketExportData = filtrados;
+      const TICKET_COLS=[['#','zammad_id'],['T. Trabajo','time_unit'],['Creado','created_at'],['Título','title'],['Producto','_product'],['Organización','organization'],['Prioridad','priority'],['Nivel','nivel_soporte'],['Estado','status'],['Propietario','owner'],['Último comentario','last_contact_at']];
 
       const kpi1=[
-        {label:'TOTAL',val:total,sub:'tickets en el período',color:'var(--t1)'},
-        {label:'ABIERTOS / NUEVOS',val:abiertos,sub:`${total>0?Math.round(abiertos/total*100):0}% del total`,color:'#10B981'},
-        {label:'CERRADOS',val:cerrados,sub:`${total>0?Math.round(cerrados/total*100):0}% del total`,color:'var(--t2)'},
+        {label:'TOTAL EN PERÍODO',val:total,sub:'tickets creados en el período',color:'var(--t1)'},
+        {label:'ABIERTOS AHORA',val:abiertos,sub:'estado actual · todos los períodos',color:'#10B981'},
+        {label:'CERRADOS EN PERÍODO',val:cerrados,sub:`${total>0?Math.round(cerrados/total*100):0}% del período`,color:'var(--t2)'},
       ];
       const kpi2=[
         {label:'RESP. 1ª PROMEDIO',val:avgRespMs>0?fmtHM(avgRespMs):'N/D',sub:respTimes.length>0?`${respTimes.length} tickets con dato`:'requiere datos de Zammad',color:avgRespMs>0?'#10B981':'var(--t3)'},
@@ -834,9 +850,7 @@
             </div>
             <div style="margin-left:auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
               ${[
-                ['GRUPO',  allGroups,   activeTicketGroup,  'setTicketGroup'],
-                ['NIVEL',  allNiveles,  activeTicketNivel,  'setTicketNivel'],
-                ['ESTADO', allStatuses, activeTicketStatus, 'setTicketStatus'],
+                ['GRUPO', allGroups, activeTicketGroup, 'setTicketGroup'],
               ].map(([lbl,opts,val,fn])=>`
                 <div style="display:flex;align-items:center;gap:6px">
                   <span style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:var(--t3)">${lbl}</span>
@@ -883,9 +897,20 @@
 
               <!-- Tickets por cliente según nivel -->
               <div style="border-right:1px solid var(--card-b)">
-                <div style="padding:12px 18px;border-bottom:1px solid var(--card-b)">
-                  <div style="font-size:12px;font-weight:700;color:var(--t1)">Tickets por cliente según nivel</div>
-                  <div style="font-size:10px;color:var(--acc2);margin-top:2px">Top 10 — ordenable, filtrable por cliente y nivel de prioridad</div>
+                <div style="padding:10px 18px;border-bottom:1px solid var(--card-b);display:flex;align-items:center;gap:10px">
+                  <div>
+                    <div style="font-size:12px;font-weight:700;color:var(--t1)">Tickets por cliente según nivel</div>
+                    <div style="font-size:10px;color:var(--acc2);margin-top:1px">Top 10 — ordenable</div>
+                  </div>
+                  <div style="margin-left:auto;display:flex;align-items:center;gap:7px">
+                    <select onchange="setTicketNivel(this.value)" style="background:var(--s1);border:1px solid var(--pill-br);color:var(--t1);font-size:11px;font-weight:600;border-radius:8px;padding:3px 8px;font-family:inherit;cursor:pointer;outline:none">
+                      ${allNiveles.map(o=>`<option value="${esc(o)}"${o===activeTicketNivel?' selected':''}>${esc(o)}</option>`).join('')}
+                    </select>
+                    <button onclick="exportNivelPDF()" title="Imprimir / PDF" style="display:flex;align-items:center;gap:4px;padding:3px 9px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:#FCA5A5;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(239,68,68,0.18)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                      PDF
+                    </button>
+                  </div>
                 </div>
                 <table style="width:100%;font-size:12px;border-collapse:collapse">
                   <thead>
@@ -900,7 +925,7 @@
                     ${nivelRows.length?nivelRows.map(r=>`
                       <tr class="hr" style="border-bottom:1px solid var(--row-b)">
                         <td style="padding:9px 14px;color:var(--t1);font-weight:500;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">.${esc(r.org)}</td>
-                        <td style="padding:9px 10px">${prioBadge(r.grp)}</td>
+                        <td style="padding:9px 10px">${nivelBadge(r.grp)}</td>
                         <td style="padding:9px 10px;text-align:right;color:var(--acc2);font-weight:700;font-size:13px">${r.count}</td>
                         <td style="padding:9px 14px;text-align:right;color:var(--t3)">${fmtHM(r.avgMs)}</td>
                       </tr>`).join('')
@@ -911,9 +936,20 @@
 
               <!-- Tickets por cliente según estado -->
               <div>
-                <div style="padding:12px 18px;border-bottom:1px solid var(--card-b)">
-                  <div style="font-size:12px;font-weight:700;color:var(--t1)">Tickets por cliente según estado</div>
-                  <div style="font-size:10px;color:var(--acc2);margin-top:2px">Top 10 — ordenable, filtrable por cliente y estado</div>
+                <div style="padding:10px 18px;border-bottom:1px solid var(--card-b);display:flex;align-items:center;gap:10px">
+                  <div>
+                    <div style="font-size:12px;font-weight:700;color:var(--t1)">Tickets por cliente según estado</div>
+                    <div style="font-size:10px;color:var(--acc2);margin-top:1px">Top 10 — ordenable</div>
+                  </div>
+                  <div style="margin-left:auto;display:flex;align-items:center;gap:7px">
+                    <select onchange="setTicketStatus(this.value)" style="background:var(--s1);border:1px solid var(--pill-br);color:var(--t1);font-size:11px;font-weight:600;border-radius:8px;padding:3px 8px;font-family:inherit;cursor:pointer;outline:none">
+                      ${allStatuses.map(o=>`<option value="${esc(o)}"${o===activeTicketStatus?' selected':''}>${esc(o)}</option>`).join('')}
+                    </select>
+                    <button onclick="exportEstadoPDF()" title="Imprimir / PDF" style="display:flex;align-items:center;gap:4px;padding:3px 9px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:#FCA5A5;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(239,68,68,0.18)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                      PDF
+                    </button>
+                  </div>
                 </div>
                 <table style="width:100%;font-size:12px;border-collapse:collapse">
                   <thead>
@@ -955,7 +991,21 @@
                   return `<button onclick="setTicketProduct('${p}')" style="padding:4px 13px;border-radius:99px;font-size:11px;font-weight:600;letter-spacing:0.03em;border:1px solid ${bc};cursor:pointer;font-family:inherit;transition:all 0.15s;background:${acc};color:${tc}">${p} <span style="font-weight:400;opacity:0.65">${cnt}</span></button>`;
                 }).join('')}
               </div>
-              <span style="font-size:10px;color:var(--t3);margin-left:auto;background:var(--row-b);border:1px solid var(--pill-br);padding:3px 10px;border-radius:99px">Abierto · Nuevo</span>
+              <input id="ticket-client-search" oninput="setTicketClientFilter(this.value)" placeholder="Buscar cliente u org…"
+                value="${esc(filterTicketClient)}"
+                style="margin-left:auto;border-radius:8px;padding:5px 12px;font-size:12px;color:var(--t1);background:var(--row-b);border:1px solid var(--pill-br);min-width:170px;font-family:inherit;transition:border-color 0.15s;outline:none"
+                onfocus="this.style.borderColor='rgba(59,107,247,0.4)'" onblur="this.style.borderColor=''">
+              <div style="display:flex;align-items:center;gap:6px">
+                <button onclick="exportTicketsCSV()" title="Exportar a CSV / Excel" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(16,185,129,0.18)'" onmouseout="this.style.background='rgba(16,185,129,0.08)'">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  CSV
+                </button>
+                <button onclick="exportTicketsPDF()" title="Exportar a PDF / Imprimir" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:#FCA5A5;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(239,68,68,0.18)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                  PDF
+                </button>
+                <span style="font-size:10px;color:var(--t3);background:var(--row-b);border:1px solid var(--pill-br);padding:3px 10px;border-radius:99px">Abierto · Nuevo</span>
+              </div>
             </div>
             <table style="width:100%;font-size:13px;min-width:820px;border-collapse:collapse">
               <thead>
@@ -970,11 +1020,21 @@
                       const isStale=daysOld>5;
                       return `
                       <tr class="hr" style="border-bottom:1px solid var(--row-b);${isStale?'border-left:3px solid rgba(239,68,68,0.6);background:rgba(239,68,68,0.04)':''};animation:slideIn 0.18s ease ${Math.min(idx,20)*0.025}s both">
-                        <td style="padding:11px 14px;font-size:12px;color:var(--acc2);font-weight:700;white-space:nowrap">#${t.zammad_id||'—'}</td>
+                        <td style="padding:11px 14px;font-size:12px;color:var(--acc2);font-weight:700;white-space:nowrap">${t.zammad_number?esc(t.zammad_number):('#'+(t.zammad_id||'—'))}</td>
+                        <td style="padding:11px 14px;font-size:12px;white-space:nowrap">${(()=>{
+                          const min=parseFloat(t.time_unit)||0;
+                          if(!min) return '<span style="color:var(--t3)">—</span>';
+                          const h=Math.floor(min/60);
+                          const m=Math.round(min%60);
+                          if(h>0) return `<span style="color:var(--acc2);font-weight:700">${h}h</span><span style="color:var(--t3)"> ${m}m</span>`;
+                          return `<span style="color:var(--acc2);font-weight:700">${m}m</span>`;
+                        })()}</td>
+                        <td style="padding:11px 14px;font-size:12px;color:var(--t3);white-space:nowrap">${fmtDate(t.created_at)||'—'}</td>
                         <td style="padding:11px 14px;color:var(--t1);max-width:240px"><span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">${esc(t.title)||'—'}</span></td>
                         <td style="padding:11px 14px">${productBadge(t.group_name||t.team)}</td>
                         <td style="padding:11px 14px;color:var(--t2);font-size:12px">${esc(t.organization||t.client)||'—'}</td>
                         <td style="padding:11px 14px">${prioBadge(t.priority)}</td>
+                        <td style="padding:11px 14px">${nivelBadge(t.nivel_soporte)}</td>
                         <td style="padding:11px 14px"><span style="font-size:12px;color:var(--t2)">${esc(t.status)||'—'}</span></td>
                         <td style="padding:11px 14px;color:var(--t2);font-size:12px">${esc(t.owner)||'—'}</td>
                         <td style="padding:11px 14px;font-size:12px">
@@ -1003,6 +1063,7 @@
         ? allActivos.filter(o => (stripHtml(o.client)||'').toLowerCase().includes(q) || (o.name||'').toLowerCase().includes(q))
         : allActivos;
       const sorted = sortData(activos, 'pedidos', 'progress_pct', -1);
+      window._pedidosExportData = sorted;
 
       return `
         ${sh('PEDIDOS')}
@@ -1017,7 +1078,15 @@
               <span style="font-size:16px;font-weight:700;color:var(--t3)">${completados}</span>
               <span style="font-size:11px;color:var(--t3)">completados (ocultos)</span>
             </div>
-            <div style="margin-left:auto">
+            <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+              <button onclick="exportPedidosCSV()" title="Exportar a CSV / Excel" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(16,185,129,0.18)'" onmouseout="this.style.background='rgba(16,185,129,0.08)'">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                CSV
+              </button>
+              <button onclick="exportPedidosPDF()" title="Exportar a PDF / Imprimir" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:#FCA5A5;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(239,68,68,0.18)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                PDF
+              </button>
               <input id="pedido-search" oninput="setPedidoClientFilter(this.value)" placeholder="Buscar cliente…"
                 value="${esc(filterPedidoClient)}"
                 style="border-radius:8px;padding:6px 12px;font-size:12px;color:var(--t1);background:var(--row-b);border:1px solid var(--pill-br);min-width:180px;font-family:inherit;transition:border-color 0.15s;outline:none"
@@ -1061,7 +1130,6 @@
     const HIST_TYPES = [
       { v:'',             l:'Todo' },
       { v:'project',      l:'Proyectos' },
-      { v:'service',      l:'Servicios' },
       { v:'installation', l:'Instalaciones' },
       { v:'ticket',       l:'Tickets' },
       { v:'order',        l:'Pedidos' },
@@ -1095,10 +1163,10 @@
       if (filterClient) items = items.filter(i => (i.note||'').toLowerCase().includes(filterClient.toLowerCase()));
       if (!items.length) return `<div class="glass" style="border-radius:12px;padding:48px;text-align:center;color:var(--t3);font-size:12px">Sin registros</div>`;
 
-      const srcColor = { telegram_voice:'var(--acc3)', manual:'var(--acc2)', zammad_sync:'var(--warn)', zoho_sync:'var(--success)' };
-      const srcLabel = { telegram_voice:'Telegram', manual:'Manual', zammad_sync:'Zammad', zoho_sync:'Zoho' };
-      const entColor = { project:'var(--acc2)', service:'var(--acc3)', installation:'var(--warn)', ticket:'var(--acc)', order:'var(--success)' };
-      const entLabel = { project:'Proyecto', service:'Servicio', installation:'Instalación', ticket:'Ticket', order:'Pedido' };
+      const srcColor = { manual:'var(--acc2)', zammad_sync:'var(--warn)', zoho_sync:'var(--success)' };
+      const srcLabel = { manual:'Manual', zammad_sync:'Zammad', zoho_sync:'Zoho' };
+      const entColor = { project:'var(--acc2)', installation:'var(--warn)', ticket:'var(--acc)', order:'var(--success)' };
+      const entLabel = { project:'Proyecto', installation:'Instalación', ticket:'Ticket', order:'Pedido' };
 
       return `<div style="display:flex;flex-direction:column;gap:8px">
         ${items.map((i, idx) => {
@@ -1123,13 +1191,6 @@
                   </div>
                   ${i.note ? `<p style="font-size:13px;color:var(--t2);line-height:1.55">${esc(i.note)}</p>` : ''}
                   ${i.created_by ? `<p style="font-size:10px;color:var(--t3);margin-top:5px">por ${esc(i.created_by)}</p>` : ''}
-                  ${i.source==='telegram_voice'&&i.raw_transcript ? `
-                    <details style="margin-top:8px">
-                      <summary style="font-size:11px;color:var(--acc3);cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:5px">
-                        <span>Ver transcripción</span>
-                      </summary>
-                      <p style="font-size:11px;color:var(--t2);margin-top:8px;padding:8px 12px;background:rgba(139,92,246,0.06);border-radius:6px;line-height:1.6">${esc(i.raw_transcript)}</p>
-                    </details>` : ''}
                 </div>
               </div>
             </div>`;
@@ -1238,8 +1299,8 @@
     }
 
     function logRow(i) {
-      const srcIcon  = { telegram_voice:'🎤', manual:'✏️', zammad_sync:'🔄', zoho_sync:'🔄' };
-      const entLabel = { project:'Proyecto', service:'Servicio', installation:'Instalación', ticket:'Ticket', order:'Pedido' };
+      const srcIcon  = { manual:'✏️', zammad_sync:'🔄', zoho_sync:'🔄' };
+      const entLabel = { project:'Proyecto', installation:'Instalación', ticket:'Ticket', order:'Pedido' };
       return `
         <div class="glass" style="border-radius:9px;padding:10px 14px;display:flex;align-items:center;gap:10px">
           <span style="font-size:13px">${srcIcon[i.source]||'📝'}</span>
@@ -1297,6 +1358,19 @@
       return `<span style="display:inline-flex;align-items:center;padding:3px 9px;border-radius:5px;font-size:10px;font-weight:700;letter-spacing:0.04em;background:${bg};border:1px solid ${br};color:${t};${glow}">${label}</span>`;
     }
 
+    function nivelBadge(n) {
+      if (!n || n === '—') return '<span style="color:var(--t3);font-size:12px">—</span>';
+      const COLORS = {
+        'Nivel 1': {bg:'rgba(239,68,68,0.13)',  br:'rgba(239,68,68,0.32)',  t:'#FCA5A5'},
+        'Nivel 2': {bg:'rgba(245,158,11,0.13)', br:'rgba(245,158,11,0.32)', t:'#FCD34D'},
+        'Nivel 3': {bg:'rgba(59,107,247,0.13)', br:'rgba(59,107,247,0.32)', t:'#93C5FD'},
+        'Nivel 4': {bg:'rgba(16,185,129,0.13)', br:'rgba(16,185,129,0.32)', t:'#6EE7B7'},
+        'Nivel 5': {bg:'rgba(139,92,246,0.13)', br:'rgba(139,92,246,0.32)', t:'#C4B5FD'},
+      };
+      const c = COLORS[n] || {bg:'rgba(100,116,139,0.12)', br:'rgba(100,116,139,0.22)', t:'#94A3B8'};
+      return `<span style="display:inline-flex;align-items:center;padding:3px 9px;border-radius:5px;font-size:10px;font-weight:700;letter-spacing:0.04em;background:${c.bg};border:1px solid ${c.br};color:${c.t}">${n}</span>`;
+    }
+
     function productBadge(prod) {
       if (!prod) return '<span style="color:var(--t3);font-size:12px">—</span>';
       const l = prod.toLowerCase();
@@ -1349,17 +1423,6 @@
         </div>
         <span style="font-size:10px;font-weight:700;color:var(--t2);font-family:var(--font-mono);flex-shrink:0;width:28px;text-align:right">${p}%</span>
       </div>`;
-    }
-
-    function relTime(ts) {
-      if (!ts) return '';
-      const diff = Date.now() - new Date(ts).getTime();
-      const m = Math.floor(diff/60000), h = Math.floor(m/60), d = Math.floor(h/24);
-      if (m < 1)  return 'ahora';
-      if (m < 60) return `hace ${m}m`;
-      if (h < 24) return `hace ${h}h`;
-      if (d < 7)  return `hace ${d}d`;
-      return new Date(ts).toLocaleDateString('es-AR', { day:'numeric', month:'short' });
     }
 
     function fmtDate(ts) {
@@ -1624,6 +1687,279 @@
       activeTicketStatus = v;
       render();
     };
+    window.setTicketClientFilter = function(v) {
+      filterTicketClient = v;
+      render();
+      const el = document.getElementById('ticket-client-search');
+      if (el) { el.focus(); el.setSelectionRange(v.length, v.length); }
+    };
+
+    window.exportTicketsCSV = function() {
+      const data = window._ticketExportData || [];
+      const fmtWork = min => { const m=parseFloat(min)||0; if(!m) return ''; const h=Math.floor(m/60); const r=Math.round(m%60); return h>0?`${h}h ${r}m`:`${r}m`; };
+      const headers = ['#','T. Trabajo','Creado','Título','Producto','Organización','Prioridad','Estado','Nivel','Propietario','Último Comentario'];
+      const rows = data.map(t => [
+        t.zammad_id || '',
+        fmtWork(t.time_unit),
+        fmtDate(t.created_at) || '',
+        t.title || '',
+        t.group_name || t.team || '',
+        t.organization || t.client || '',
+        t.priority || '',
+        t.status || '',
+        t.nivel_soporte || '',
+        t.owner || '',
+        fmtDate(t.last_contact_at) || ''
+      ]);
+      const csv = [headers, ...rows]
+        .map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))
+        .join('\n');
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tickets_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    window.exportTicketsPDF = function() {
+      const data = window._ticketExportData || [];
+      const escP = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const fmtWork = min => { const m=parseFloat(min)||0; if(!m) return '—'; const h=Math.floor(m/60); const r=Math.round(m%60); return h>0?`${h}h ${r}m`:`${r}m`; };
+      const rows = data.map(t => {
+        const daysOld = t.last_contact_at ? (Date.now() - new Date(t.last_contact_at)) / 86400000 : 999;
+        const isStale = daysOld > 5;
+        return `<tr class="${isStale ? 'stale' : ''}">
+          <td>#${escP(t.zammad_id)}</td>
+          <td style="white-space:nowrap">${fmtWork(t.time_unit)}</td>
+          <td style="white-space:nowrap">${escP(fmtDate(t.created_at))}</td>
+          <td>${escP(t.title)}</td>
+          <td>${escP(t.group_name||t.team)}</td>
+          <td>${escP(t.organization||t.client)}</td>
+          <td>${escP(t.priority)}</td>
+          <td>${escP(t.status)}</td>
+          <td>${escP(t.nivel_soporte)}</td>
+          <td>${escP(t.owner)}</td>
+          <td>${escP(fmtDate(t.last_contact_at))}${isStale ? ` <span class="stale-badge">⚠ ${Math.floor(daysOld)}d</span>` : ''}</td>
+        </tr>`;
+      }).join('');
+      const win = window.open('', '_blank');
+      win.document.write(`<!DOCTYPE html><html lang="es"><head>
+        <meta charset="UTF-8">
+        <title>Tickets Grupo SPEC — ${new Date().toLocaleDateString('es-AR')}</title>
+        <style>
+          body{font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#111;margin:20px}
+          h2{font-size:15px;margin-bottom:3px;color:#111}
+          p.meta{font-size:10px;color:#666;margin-bottom:14px}
+          table{width:100%;border-collapse:collapse;table-layout:fixed}
+          th{background:#1e2235;color:#fff;padding:6px 8px;text-align:left;font-size:9px;letter-spacing:0.05em;font-weight:700}
+          td{padding:5px 7px;border-bottom:1px solid #e5e7eb;vertical-align:top;word-break:break-word}
+          tr.stale td{background:#fff5f5}
+          tr:nth-child(even) td{background:#f9fafb}
+          tr.stale:nth-child(even) td{background:#fff0f0}
+          .stale-badge{color:#b91c1c;font-weight:700;font-size:10px}
+          @page{size:A4 landscape;margin:12mm}
+          @media print{body{margin:0}}
+        </style>
+      </head><body>
+        <h2>Tickets Abiertos — Grupo SPEC</h2>
+        <p class="meta">Exportado: ${new Date().toLocaleString('es-AR')} &nbsp;·&nbsp; ${data.length} ticket${data.length!==1?'s':''}</p>
+        <table>
+          <colgroup>
+            <col style="width:5%"><col style="width:7%"><col style="width:10%"><col style="width:18%">
+            <col style="width:8%"><col style="width:12%"><col style="width:7%"><col style="width:7%">
+            <col style="width:7%"><col style="width:8%"><col style="width:11%">
+          </colgroup>
+          <thead><tr><th>#</th><th>T. Trabajo</th><th>Creado</th><th>Título</th><th>Producto</th><th>Organización</th><th>Prioridad</th><th>Estado</th><th>Nivel</th><th>Propietario</th><th>Último Comentario</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <script>window.onload=()=>window.print();<\/script>
+      </body></html>`);
+      win.document.close();
+    };
+
+    function _buildAnalysisPDF(data, title, colHeader, rowFn) {
+      const escP = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const rows = data.map(r => rowFn(r, escP)).join('');
+      const win = window.open('', '_blank');
+      win.document.write(`<!DOCTYPE html><html lang="es"><head>
+        <meta charset="UTF-8">
+        <title>${title} — ${new Date().toLocaleDateString('es-AR')}</title>
+        <style>
+          body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111;margin:20px}
+          h2{font-size:14px;margin-bottom:3px}
+          p.meta{font-size:10px;color:#666;margin-bottom:12px}
+          table{width:60%;border-collapse:collapse}
+          th{background:#1e2235;color:#fff;padding:6px 10px;text-align:left;font-size:10px;letter-spacing:0.05em;font-weight:700}
+          th.num{text-align:right}
+          td{padding:5px 10px;border-bottom:1px solid #e5e7eb;vertical-align:middle}
+          td.num{text-align:right;font-weight:700;color:#3b6bf7}
+          td.avg{text-align:right;color:#6b7280}
+          tr:nth-child(even) td{background:#f9fafb}
+          @page{margin:15mm}
+          @media print{body{margin:0}}
+        </style>
+      </head><body>
+        <h2>${title}</h2>
+        <p class="meta">Exportado: ${new Date().toLocaleString('es-AR')} &nbsp;·&nbsp; ${data.length} registros</p>
+        <table>
+          <thead><tr><th>CLIENTE / ORG</th><th>${colHeader}</th><th class="num">CANTIDAD</th><th class="num avg">T. PROMEDIO</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <script>window.onload=()=>window.print();<\/script>
+      </body></html>`);
+      win.document.close();
+    }
+
+    window.exportNivelPDF = function() {
+      _buildAnalysisPDF(
+        window._nivelExportData || [],
+        'Tickets por cliente según nivel — Grupo SPEC',
+        'NIVEL',
+        (r, escP) => `<tr><td>${escP(r.org)}</td><td>${escP(r.grp)}</td><td class="num">${r.count}</td><td class="avg">${fmtHM(r.avgMs)}</td></tr>`
+      );
+    };
+
+    window.exportEstadoPDF = function() {
+      _buildAnalysisPDF(
+        window._estadoExportData || [],
+        'Tickets por cliente según estado — Grupo SPEC',
+        'ESTADO',
+        (r, escP) => `<tr><td>${escP(r.org)}</td><td>${escP(r.grp)}</td><td class="num">${r.count}</td><td class="avg">${fmtHM(r.avgMs)}</td></tr>`
+      );
+    };
+
+    window.exportProyectosCSV = function() {
+      const data = window._proyectosExportData || [];
+      const headers = ['Proyecto','Grupo','Estado','Avance %','Próximo Paso','Actualizado'];
+      const rows = data.map(p => [
+        p.name || '',
+        p.team || '',
+        p.status || '',
+        p.progress_pct != null ? p.progress_pct : '',
+        p.next_step || '',
+        fmtDate(p.updated_at) || ''
+      ]);
+      const csv = [headers, ...rows]
+        .map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))
+        .join('\n');
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `proyectos_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    window.exportProyectosPDF = function() {
+      const data = window._proyectosExportData || [];
+      const escP = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const rows = data.map(p => `<tr>
+        <td>${escP(p.name)}</td>
+        <td>${escP(p.team)}</td>
+        <td>${escP(p.status)}</td>
+        <td style="text-align:center">${p.progress_pct != null ? p.progress_pct + '%' : '—'}</td>
+        <td>${escP(p.next_step)}</td>
+        <td>${escP(fmtDate(p.updated_at))}</td>
+      </tr>`).join('');
+      const win = window.open('', '_blank');
+      win.document.write(`<!DOCTYPE html><html lang="es"><head>
+        <meta charset="UTF-8">
+        <title>Proyectos Grupo SPEC — ${new Date().toLocaleDateString('es-AR')}</title>
+        <style>
+          body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111;margin:20px}
+          h2{font-size:15px;margin-bottom:3px}
+          p.meta{font-size:10px;color:#666;margin-bottom:14px}
+          table{width:100%;border-collapse:collapse;table-layout:fixed}
+          th{background:#1e2235;color:#fff;padding:6px 8px;text-align:left;font-size:10px;letter-spacing:0.05em;font-weight:700}
+          td{padding:5px 7px;border-bottom:1px solid #e5e7eb;vertical-align:top;word-break:break-word}
+          tr:nth-child(even) td{background:#f9fafb}
+          @page{margin:15mm}
+          @media print{body{margin:0}}
+        </style>
+      </head><body>
+        <h2>Proyectos — Grupo SPEC</h2>
+        <p class="meta">Exportado: ${new Date().toLocaleString('es-AR')} &nbsp;·&nbsp; ${data.length} proyecto${data.length!==1?'s':''}</p>
+        <table>
+          <colgroup>
+            <col style="width:28%"><col style="width:12%"><col style="width:10%">
+            <col style="width:8%"><col style="width:28%"><col style="width:14%">
+          </colgroup>
+          <thead><tr><th>Proyecto</th><th>Grupo</th><th>Estado</th><th>Avance</th><th>Próximo Paso</th><th>Actualizado</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <script>window.onload=()=>window.print();<\/script>
+      </body></html>`);
+      win.document.close();
+    };
+
+    window.exportPedidosCSV = function() {
+      const data = window._pedidosExportData || [];
+      const headers = ['Pedido','Cliente','Estado','Avance %','Fuente','Actualizado'];
+      const rows = data.map(o => [
+        o.name || '',
+        stripHtml(o.client) || '',
+        o.status || '',
+        o.progress_pct != null ? o.progress_pct : '',
+        o.source || '',
+        fmtDate(o.updated_at) || ''
+      ]);
+      const csv = [headers, ...rows]
+        .map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))
+        .join('\n');
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `pedidos_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    window.exportPedidosPDF = function() {
+      const data = window._pedidosExportData || [];
+      const escP = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const rows = data.map(o => `<tr>
+        <td>${escP(o.name)}</td>
+        <td>${escP(stripHtml(o.client))}</td>
+        <td>${escP(o.status)}</td>
+        <td style="text-align:center">${o.progress_pct != null ? o.progress_pct + '%' : '—'}</td>
+        <td>${escP(o.source)}</td>
+        <td>${escP(fmtDate(o.updated_at))}</td>
+      </tr>`).join('');
+      const win = window.open('', '_blank');
+      win.document.write(`<!DOCTYPE html><html lang="es"><head>
+        <meta charset="UTF-8">
+        <title>Pedidos Grupo SPEC — ${new Date().toLocaleDateString('es-AR')}</title>
+        <style>
+          body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111;margin:20px}
+          h2{font-size:15px;margin-bottom:3px}
+          p.meta{font-size:10px;color:#666;margin-bottom:14px}
+          table{width:100%;border-collapse:collapse;table-layout:fixed}
+          th{background:#1e2235;color:#fff;padding:6px 8px;text-align:left;font-size:10px;letter-spacing:0.05em;font-weight:700}
+          td{padding:5px 7px;border-bottom:1px solid #e5e7eb;vertical-align:top;word-break:break-word}
+          tr:nth-child(even) td{background:#f9fafb}
+          @page{margin:15mm}
+          @media print{body{margin:0}}
+        </style>
+      </head><body>
+        <h2>Pedidos Activos — Grupo SPEC</h2>
+        <p class="meta">Exportado: ${new Date().toLocaleString('es-AR')} &nbsp;·&nbsp; ${data.length} pedido${data.length!==1?'s':''}</p>
+        <table>
+          <colgroup>
+            <col style="width:30%"><col style="width:18%"><col style="width:10%">
+            <col style="width:8%"><col style="width:12%"><col style="width:22%">
+          </colgroup>
+          <thead><tr><th>Pedido</th><th>Cliente</th><th>Estado</th><th>Avance</th><th>Fuente</th><th>Actualizado</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <script>window.onload=()=>window.print();<\/script>
+      </body></html>`);
+      win.document.close();
+    };
+
     window.setPedidoClientFilter = function(v) {
       filterPedidoClient = v;
       // re-render sin resetear el input — actualizamos solo el tbody

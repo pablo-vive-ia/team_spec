@@ -7,7 +7,7 @@
 
 -- TIPOS ENUM (solo crea si no existen)
 DO $$ BEGIN
-  CREATE TYPE entity_type AS ENUM ('project', 'service', 'ticket', 'order', 'installation');
+  CREATE TYPE entity_type AS ENUM ('project', 'ticket', 'order', 'installation');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
@@ -37,16 +37,6 @@ CREATE TABLE IF NOT EXISTS projects (
   updated_at timestamptz DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS services (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  client text,
-  team team_name NOT NULL DEFAULT 'netTime',
-  status entity_status NOT NULL DEFAULT 'pendiente',
-  next_step text,
-  updated_at timestamptz DEFAULT now()
-);
-
 CREATE TABLE IF NOT EXISTS installations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   technician text NOT NULL,
@@ -73,12 +63,15 @@ CREATE TABLE IF NOT EXISTS tickets (
   organization text,
   last_contact_at timestamptz,
   first_response_at timestamptz,
+  time_unit numeric,
   created_at timestamptz,
   updated_at timestamptz DEFAULT now()
 );
 
--- Migración: agrega nivel_soporte si la tabla ya existía sin esta columna
+-- Migraciones idempotentes (para tablas ya existentes)
 ALTER TABLE tickets ADD COLUMN IF NOT EXISTS nivel_soporte text;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS time_unit numeric;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS zammad_number text;
 
 CREATE TABLE IF NOT EXISTS orders (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -110,10 +103,6 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
-  ALTER PUBLICATION supabase_realtime ADD TABLE services;
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
   ALTER PUBLICATION supabase_realtime ADD TABLE installations;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
@@ -131,7 +120,6 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- RLS — habilitar en todas las tablas
 ALTER TABLE projects    ENABLE ROW LEVEL SECURITY;
-ALTER TABLE services    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE installations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tickets     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders      ENABLE ROW LEVEL SECURITY;
@@ -140,10 +128,6 @@ ALTER TABLE status_log  ENABLE ROW LEVEL SECURITY;
 -- POLICIES — lectura pública (anon key); escritura solo via service_role (n8n)
 DO $$ BEGIN
   CREATE POLICY "lectura publica" ON projects FOR SELECT USING (true);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-DO $$ BEGIN
-  CREATE POLICY "lectura publica" ON services FOR SELECT USING (true);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
