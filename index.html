@@ -349,7 +349,6 @@
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zbnR0eGdtc2Z1ZGdoaW54ZmF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI5MzQ0OTgsImV4cCI6MjA2ODUxMDQ5OH0.hMkwavqQUDn5P3DnR5J8JB1aKSRV6sagEfKF_uOPGSE';
 
     let activeSection      = 'resumen';
-    let filterEntity       = '';
     let filterClient       = '';
     let activeProjectGroup  = 'Todos';
     let activeTicketProduct = 'Todos';
@@ -428,7 +427,6 @@
     // ── NAVEGACIÓN ─────────────────────────────────────────────────────
     function switchSection(section) {
       activeSection       = section;
-      filterEntity        = '';
       filterClient        = '';
       filterTicketClient  = '';
       filterPedidoClient  = '';
@@ -499,13 +497,13 @@
           ${kpi('Instalaciones pendientes',pendInst,     svgWrench, 'var(--acc3)')}
           ${kpi('Items frenados',          blocked,      svgBlock,  'var(--danger)')}
         </div>
-        ${D.log.length ? `
+        ${(() => { const instLog = D.log.filter(i => i.entity_type === 'installation'); return instLog.length ? `
           <div style="margin-top:36px">
-            <p class="sec-label" style="color:var(--t3);margin-bottom:10px">ÚLTIMOS MOVIMIENTOS</p>
+            <p class="sec-label" style="color:var(--t3);margin-bottom:10px">ÚLTIMOS MOVIMIENTOS — INSTALACIONES</p>
             <div style="display:flex;flex-direction:column;gap:6px">
-              ${D.log.slice(0,5).map(logRow).join('')}
+              ${instLog.slice(0,5).map(logRow).join('')}
             </div>
-          </div>` : ''}
+          </div>` : ''; })()}
       `;
     }
 
@@ -1127,26 +1125,12 @@
     }
 
     // ── SECCIÓN: HISTORIAL ─────────────────────────────────────────────
-    const HIST_TYPES = [
-      { v:'',             l:'Todo' },
-      { v:'project',      l:'Proyectos' },
-      { v:'installation', l:'Instalaciones' },
-      { v:'ticket',       l:'Tickets' },
-      { v:'order',        l:'Pedidos' },
-    ];
-
     function renderHistorial() {
-      const cnt = D.log.length;
+      const instLog = D.log.filter(i => i.entity_type === 'installation');
+      const cnt = instLog.length;
       return `
-        ${sh('HISTORIAL')}
+        ${sh('HISTORIAL — INSTALACIONES')}
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:20px">
-          <div style="display:flex;gap:4px;padding:3px;border-radius:99px;background:var(--row-b);border:1px solid var(--pill-br)">
-            ${HIST_TYPES.map(t => `
-              <button id="hf-${t.v||'all'}" onclick="setHistFilter('${t.v}')"
-                style="padding:5px 14px;border-radius:99px;font-size:11px;font-weight:600;letter-spacing:0.03em;border:1px solid transparent;cursor:pointer;font-family:inherit;transition:all 0.15s;${filterEntity===t.v ? 'background:rgba(59,107,247,0.22);color:var(--t1);border-color:rgba(59,107,247,0.32)' : 'background:transparent;color:var(--t3)'}">
-                ${t.l}
-              </button>`).join('')}
-          </div>
           <input id="fil-client" oninput="applyHistFilter()" placeholder="Buscar en notas…"
             value="${filterClient}"
             style="border-radius:8px;padding:7px 12px;font-size:12px;color:var(--t1);background:var(--row-b);border:1px solid var(--pill-br);min-width:200px;font-family:inherit;transition:border-color 0.15s"
@@ -1158,8 +1142,7 @@
     }
 
     function renderHistList() {
-      let items = D.log;
-      if (filterEntity) items = items.filter(i => i.entity_type === filterEntity);
+      let items = D.log.filter(i => i.entity_type === 'installation');
       if (filterClient) items = items.filter(i => (i.note||'').toLowerCase().includes(filterClient.toLowerCase()));
       if (!items.length) return `<div class="glass" style="border-radius:12px;padding:48px;text-align:center;color:var(--t3);font-size:12px">Sin registros</div>`;
 
@@ -1998,17 +1981,6 @@
       else { estadoTableSort.col=col; estadoTableSort.dir=(col==='count'||col==='avgMs')?-1:1; }
       render();
     };
-    window.setHistFilter = function(type) {
-      filterEntity = type;
-      document.querySelectorAll('[id^="hf-"]').forEach(btn => {
-        const on = btn.id === `hf-${type||'all'}`;
-        btn.style.background  = on ? 'rgba(59,107,247,0.22)' : 'transparent';
-        btn.style.color       = on ? 'var(--t1)' : 'var(--t3)';
-        btn.style.borderColor = on ? 'rgba(59,107,247,0.32)' : 'transparent';
-      });
-      document.getElementById('hist-list').innerHTML = renderHistList();
-    };
-
     window.applyHistFilter = function() {
       filterClient = document.getElementById('fil-client')?.value || '';
       document.getElementById('hist-list').innerHTML = renderHistList();
