@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**Gestion Team netTime** — internal operations dashboard for netTime and SPECManager teams. Tracks projects, services, installations, tickets (from Zammad), and orders (from Zoho Projects).
+**Gestion Team netTime** — internal operations dashboard for netTime and SPECManager teams. Tracks projects, installations, tickets (from Zammad), and orders (from Zoho Projects).
 
 Full spec: [`dashboard-vive-os-spec.md`](dashboard-vive-os-spec.md)
 
@@ -14,9 +14,6 @@ Full spec: [`dashboard-vive-os-spec.md`](dashboard-vive-os-spec.md)
 Zammad API ──┐
              ├─► n8n (sync cron, every 15 min) ──► Supabase (tables)
 Zoho API ────┘                                          │
-                                                        ▼
-Telegram (audio) ─► n8n (Whisper + LLM) ─► Supabase (update + status_log)
-                                                        │
                                                         ▼
                                         index.html (Supabase JS Realtime, no polling)
 ```
@@ -29,7 +26,7 @@ Telegram (audio) ─► n8n (Whisper + LLM) ─► Supabase (update + status_log
 - **MCP access:** available via `.mcp.json` — apply schema via MCP or SQL Editor
 - **Schema:** `schema.sql` (idempotente, seguro para re-ejecutar con IF NOT EXISTS)
 - **Security model:** anon key is hardcoded in client JS — this is intentional. Security comes from RLS policies (public read, service_role write from n8n only). Do not treat this as a vulnerability.
-- **Realtime:** subscriptions on all 6 tables (`projects`, `services`, `installations`, `tickets`, `orders`, `status_log`) — no polling needed in the frontend.
+- **Realtime:** subscriptions on 5 tables (`projects`, `installations`, `tickets`, `orders`, `status_log`) — no polling needed in the frontend.
 - **Aplicar schema:** ir a [SQL Editor](https://supabase.com/dashboard/project/osnttxgmsfudghinxfat/sql/new) y ejecutar `schema.sql` completo.
 
 ## Frontend Constraints
@@ -43,7 +40,9 @@ Telegram (audio) ─► n8n (Whisper + LLM) ─► Supabase (update + status_log
 
 **Team selector:** top-level tabs "netTime" / "SPECManager" that apply `.eq('team', activeTeam)` to every Supabase query. Same HTML, different filter — not two pages.
 
-**Sections:** Resumen (KPI cards), Proyectos (kanban + progress bar), Servicios, Instalaciones (table), Tickets (table + iframe to `https://n8n.vive-ia.com/webhook/zammad-dashboard`), Pedidos, Historial (status_log timeline).
+**Sections:** Resumen (KPI cards + últimos movimientos instalaciones), Proyectos (kanban + progress bar), Instalaciones (table), Tickets (table + iframe to `https://n8n.vive-ia.com/webhook/zammad-dashboard`), Pedidos, Historial (status_log timeline — solo instalaciones).
+
+**`D` object:** `{ projects, installations, tickets, orders, log }` — no services.
 
 ### Theming (dark/light mode)
 
@@ -59,11 +58,18 @@ All JS-generated HTML uses these variables in inline styles — never hardcode `
 
 **Dates:** always absolute format `DD/MM/YYYY HH:mm` via `fmtDate(ts)` — never relative ("hace 2h").
 
-**Tickets:** includes `zammad_id` column and stale ticket alert (red highlight + icon) when `last_contact_at` > 5 days ago.
+**Tickets:** includes `zammad_id` and `zammad_number` columns. Stale ticket alert (red highlight + icon) when `last_contact_at` > 5 days ago.
 
 **Zammad iframe:** the dark KPI band at the top of Tickets section is an external iframe from n8n — its styling cannot be controlled from `index.html`.
 
 **Select dropdowns:** all `<select>` and `<option>` have global CSS rules for dark/light contrast — never style options inline without matching both modes.
+
+### Resumen & Historial — solo instalaciones
+
+- **Resumen** "ÚLTIMOS MOVIMIENTOS": filtra `D.log` a `entity_type === 'installation'`, muestra los últimos 5.
+- **Historial**: hardcodeado a `entity_type === 'installation'`. Sin filtros de tipo (HIST_TYPES eliminado). Solo tiene buscador de texto en notas.
+- `filterEntity` y `setHistFilter` no existen en el código — fueron eliminados.
+- `status_log` en la DB contiene solo registros de instalaciones (limpieza realizada vía MCP Supabase).
 
 ## n8n Workflows (on n8n.vive-ia.com)
 
@@ -71,17 +77,19 @@ All JS-generated HTML uses these variables in inline styles — never hardcode `
 |---|---|---|---|
 | `zammad-sync-supabase` | `votsdMSzgAHnTSA0` | Cron 15 min | `tickets`, `status_log` |
 | `zoho-projects-sync-supabase` | `bbnieKNegHRGrfvF` | Cron 12h | `projects`, `orders`, `status_log` |
-| `telegram-status-update` | `SjD5aAOWywPS92eM` | Telegram voice/text | all tables + `status_log` |
+| `telegram-status-update` | `SjD5aAOWywPS92eM` | Telegram voice/text | `installations` + `status_log` |
 
 URLs:
 - https://n8n.vive-ia.com/workflow/votsdMSzgAHnTSA0
 - https://n8n.vive-ia.com/workflow/bbnieKNegHRGrfvF
 - https://n8n.vive-ia.com/workflow/SjD5aAOWywPS92eM
 
+> **Nota:** El workflow de Telegram sigue activo en n8n y escribe en Supabase. El frontend ya no muestra datos específicos de Telegram (se eliminó la lógica de `telegram_voice` del frontend).
+
 ## Current Status
 
-- `index.html` — ✅ completo. Anon key hardcoded. Branding Grupo SPEC (Plus Jakarta Sans, paleta corporativa, logo via `logo.png`). Light/dark toggle, fechas absolutas, columna zammad_id, stale ticket alerts, CSS variable theming completo. `select option` con colores dark/light para todos los dropdowns. Tickets usa `group_name || team` para `ticketProductLabel()` y `productBadge()`.
-- `schema.sql` — ✅ idempotente (IF NOT EXISTS + DO $$ EXCEPTION en enums/policies). Pendiente aplicar en Supabase SQL Editor si las tablas no existen.
+- `index.html` — ✅ completo. Sin servicios, sin Telegram en frontend. Anon key hardcoded. Branding Grupo SPEC (Plus Jakarta Sans, paleta corporativa, logo via `logo.png`). Light/dark toggle, fechas absolutas, columna zammad_id + zammad_number, stale ticket alerts, CSS variable theming completo. Resumen e Historial filtrados a instalaciones.
+- `schema.sql` — ✅ idempotente (IF NOT EXISTS + DO $$ EXCEPTION en enums/policies). Sin tabla services. Migraciones idempotentes: `nivel_soporte`, `time_unit`, `zammad_number` en tickets.
 - `logo.png` — ✅ en raíz del proyecto.
 - Supabase MCP — ✅ configurado en `.mcp.json` (`osnttxgmsfudghinxfat`).
 - n8n MCP — ✅ configurado en `.mcp.json` via HTTP transport (`https://n8n.vive-ia.com/mcp-server/http`).
@@ -196,7 +204,7 @@ El workflow `telegram-status-update` (`SjD5aAOWywPS92eM`) soporta voz y texto. F
 5. Si `confidence < 0.5`: pide aclaración por Telegram
 
 ### Creación de instalaciones por voz
-Solo las instalaciones se pueden **crear** por voz/texto. Proyectos, servicios, tickets y pedidos solo se actualizan.
+Solo las instalaciones se pueden **crear** por voz/texto. Proyectos, tickets y pedidos solo se actualizan.
 
 Campos que extrae el LLM para instalaciones nuevas:
 - `client` — nombre del cliente
