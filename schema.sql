@@ -83,6 +83,19 @@ CREATE TABLE IF NOT EXISTS orders (
   updated_at timestamptz DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS tasks (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  description text,
+  assignee text,
+  team team_name NOT NULL DEFAULT 'netTime',
+  priority text NOT NULL DEFAULT 'media',
+  status text NOT NULL DEFAULT 'pendiente',
+  due_date date,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS status_log (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   entity_type entity_type NOT NULL,
@@ -118,14 +131,20 @@ DO $$ BEGIN
   ALTER PUBLICATION supabase_realtime ADD TABLE status_log;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE tasks;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
 -- RLS — habilitar en todas las tablas
 ALTER TABLE projects    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE installations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tickets     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE status_log  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tasks       ENABLE ROW LEVEL SECURITY;
 
 -- POLICIES — lectura pública (anon key); escritura solo via service_role (n8n)
+-- Excepción: tasks permite escritura desde el frontend (tool interno protegido por auth)
 DO $$ BEGIN
   CREATE POLICY "lectura publica" ON projects FOR SELECT USING (true);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -144,4 +163,20 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
   CREATE POLICY "lectura publica" ON status_log FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "lectura publica" ON tasks FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "escritura interna" ON tasks FOR INSERT WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "actualizacion interna" ON tasks FOR UPDATE USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "eliminacion interna" ON tasks FOR DELETE USING (true);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;

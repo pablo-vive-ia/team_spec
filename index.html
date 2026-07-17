@@ -299,6 +299,7 @@
         <button id="nav-instalaciones" onclick="switchSection('instalaciones')" class="nav-btn" style="padding:11px 16px;font-size:11px;font-weight:500;letter-spacing:0.07em;white-space:nowrap;position:relative;background:transparent;border:none;cursor:pointer;font-family:inherit;transition:color 0.15s;color:var(--t3)">INSTALACIONES</button>
         <button id="nav-tickets"       onclick="switchSection('tickets')"       class="nav-btn" style="padding:11px 16px;font-size:11px;font-weight:500;letter-spacing:0.07em;white-space:nowrap;position:relative;background:transparent;border:none;cursor:pointer;font-family:inherit;transition:color 0.15s;color:var(--t3)">TICKETS</button>
         <button id="nav-pedidos"       onclick="switchSection('pedidos')"       class="nav-btn" style="padding:11px 16px;font-size:11px;font-weight:500;letter-spacing:0.07em;white-space:nowrap;position:relative;background:transparent;border:none;cursor:pointer;font-family:inherit;transition:color 0.15s;color:var(--t3)">PEDIDOS</button>
+        <button id="nav-tareas"        onclick="switchSection('tareas')"        class="nav-btn" style="padding:11px 16px;font-size:11px;font-weight:500;letter-spacing:0.07em;white-space:nowrap;position:relative;background:transparent;border:none;cursor:pointer;font-family:inherit;transition:color 0.15s;color:var(--t3)">TAREAS INTERNAS</button>
         <button id="nav-historial"     onclick="switchSection('historial')"     class="nav-btn" style="padding:11px 16px;font-size:11px;font-weight:500;letter-spacing:0.07em;white-space:nowrap;position:relative;background:transparent;border:none;cursor:pointer;font-family:inherit;transition:color 0.15s;color:var(--t3)">HISTORIAL</button>
       </div>
     </div>
@@ -350,6 +351,8 @@
 
     let activeSection      = 'resumen';
     let filterClient       = '';
+    let activeTaskStatus   = 'Todos';
+    let activeTaskTeam     = 'Todos';
     let activeProjectGroup  = 'Todos';
     let activeTicketProduct = 'Todos';
     let activeTicketGroup   = 'Todos';
@@ -360,7 +363,7 @@
     let filterPedidoClient  = '';
     let nivelTableSort  = {col:'count', dir:-1};
     let estadoTableSort = {col:'count', dir:-1};
-    let D = { projects:[], installations:[], tickets:[], orders:[], log:[] };
+    let D = { projects:[], installations:[], tickets:[], orders:[], log:[], tasks:[] };
     let sortState = {
       proyectos:     { col: 'progress_pct', dir: -1 },
       pedidos:       { col: 'progress_pct', dir: -1 },
@@ -375,16 +378,17 @@
     // ── CARGA ──────────────────────────────────────────────────────────
     async function loadAll(animated = false) {
       const opts = { ascending: false };
-      const [p,i,t,o,l] = await Promise.all([
+      const [p,i,t,o,l,tk] = await Promise.all([
         sb.from('projects').select('*').order('updated_at',opts),
         sb.from('installations').select('*').order('updated_at',opts),
         sb.from('tickets').select('*').order('updated_at',opts),
         sb.from('orders').select('*').order('updated_at',opts),
         sb.from('status_log').select('*').order('created_at',opts).limit(200),
+        sb.from('tasks').select('*').order('created_at',opts),
       ]);
-      const err = [p,i,t,o,l].find(r => r.error);
+      const err = [p,i,t,o,l,tk].find(r => r.error);
       if (err?.error) { console.error(err.error); showError(err.error.message); return; }
-      D = { projects:p.data||[], installations:i.data||[], tickets:t.data||[], orders:o.data||[], log:l.data||[] };
+      D = { projects:p.data||[], installations:i.data||[], tickets:t.data||[], orders:o.data||[], log:l.data||[], tasks:tk.data||[] };
       render(animated);
     }
 
@@ -401,7 +405,7 @@
     function subscribeRealtime() {
       rtChannels.forEach(c => sb.removeChannel(c));
       rtChannels.length = 0;
-      ['projects','installations','tickets','orders','status_log'].forEach(table => {
+      ['projects','installations','tickets','orders','status_log','tasks'].forEach(table => {
         const ch = sb.channel(`rt_${table}`)
           .on('postgres_changes', { event:'*', schema:'public', table }, () => loadAll())
           .subscribe(status => {
@@ -454,6 +458,7 @@
         tickets:       renderTickets,
         pedidos:       renderPedidos,
         historial:     renderHistorial,
+        tareas:        renderTareas,
       };
       el.innerHTML = (map[activeSection] || renderResumen)();
       animatePbars();
@@ -513,6 +518,8 @@
     const svgWrench = `<svg viewBox="0 0 20 20" fill="currentColor" style="width:15px;height:15px"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>`;
     const svgBlock  = `<svg viewBox="0 0 20 20" fill="currentColor" style="width:15px;height:15px"><path fill-rule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clip-rule="evenodd"/></svg>`;
     const svgBox    = `<svg viewBox="0 0 20 20" fill="currentColor" style="width:15px;height:15px"><path d="M4 3a2 2 0 100 4h12a2 2 0 100-4H4z"/><path fill-rule="evenodd" d="M3 8h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V8zm5 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>`;
+    const svgCheck  = `<svg viewBox="0 0 20 20" fill="currentColor" style="width:15px;height:15px"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>`;
+    const svgAlert  = `<svg viewBox="0 0 20 20" fill="currentColor" style="width:15px;height:15px"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>`;
 
     function countUpAll() {
       document.querySelectorAll('[data-count]').forEach(el => {
@@ -1985,6 +1992,269 @@
       filterClient = document.getElementById('fil-client')?.value || '';
       document.getElementById('hist-list').innerHTML = renderHistList();
     };
+
+    // ── SECCIÓN: TAREAS ────────────────────────────────────────────────
+    const TASK_STATUS_CYCLE = { pendiente:'en_progreso', en_progreso:'completado', completado:'pendiente' };
+    const TASK_STATUS_LABEL = { pendiente:'Pendiente', en_progreso:'En progreso', completado:'Completado', cancelado:'Cancelado' };
+    const TASK_STATUS_BG    = { pendiente:'rgba(156,163,175,0.15)', en_progreso:'rgba(59,107,247,0.18)', completado:'rgba(34,197,94,0.15)', cancelado:'rgba(107,114,128,0.10)' };
+    const TASK_STATUS_FG    = { pendiente:'var(--t2)', en_progreso:'var(--acc)', completado:'var(--success)', cancelado:'var(--t3)' };
+    const TASK_PRIO_COLOR   = { baja:'var(--success)', media:'var(--acc)', alta:'var(--warn)', urgente:'var(--danger)' };
+    const TASK_PRIO_LABEL   = { baja:'Baja', media:'Media', alta:'Alta', urgente:'Urgente' };
+    const TASK_PRIO_ORDER   = { urgente:0, alta:1, media:2, baja:3 };
+    const TASK_ST_ORDER     = { pendiente:0, en_progreso:1, completado:2, cancelado:3 };
+    const TASK_TEAMS_F      = ['Todos','netTime','SPECManager'];
+    const TASK_STATUSES_F   = ['Todos','pendiente','en_progreso','completado','cancelado'];
+
+    function renderTareas() {
+      const today = new Date(); today.setHours(0,0,0,0);
+
+      let tasks = D.tasks;
+      if (activeTaskStatus !== 'Todos') tasks = tasks.filter(t => t.status === activeTaskStatus);
+
+      tasks = [...tasks].sort((a,b) => {
+        if (TASK_ST_ORDER[a.status] !== TASK_ST_ORDER[b.status]) return TASK_ST_ORDER[a.status] - TASK_ST_ORDER[b.status];
+        if (a.due_date && b.due_date) return new Date(a.due_date) - new Date(b.due_date);
+        if (a.due_date) return -1; if (b.due_date) return 1;
+        return (TASK_PRIO_ORDER[a.priority]||2) - (TASK_PRIO_ORDER[b.priority]||2);
+      });
+
+      const pendCount    = D.tasks.filter(t => t.status === 'pendiente').length;
+      const inProgCount  = D.tasks.filter(t => t.status === 'en_progreso').length;
+      const overdueCount = D.tasks.filter(t => t.due_date && !['completado','cancelado'].includes(t.status) && new Date(t.due_date) < today).length;
+      const doneCount    = D.tasks.filter(t => t.status === 'completado').length;
+
+      const pillBtn = (label, active, onclick) =>
+        `<button onclick="${onclick}" style="padding:5px 12px;border-radius:99px;font-size:11px;font-weight:600;letter-spacing:0.03em;border:1px solid transparent;cursor:pointer;font-family:inherit;transition:all 0.15s;${active ? 'background:rgba(59,107,247,0.22);color:var(--t1);border-color:rgba(59,107,247,0.32)' : 'background:transparent;color:var(--t3)'}">${label}</button>`;
+
+      return `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+          <p class="sec-label" style="color:var(--t3);margin:0">TAREAS INTERNAS</p>
+          <button onclick="openTaskModal(null)"
+            style="padding:8px 18px;border-radius:8px;background:var(--acc);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;letter-spacing:0.04em;transition:opacity 0.15s"
+            onmouseover="this.style.opacity='0.82'" onmouseout="this.style.opacity='1'">+ Nueva Tarea</button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px">
+          ${kpi('Pendientes',  pendCount,   svgBlock, 'var(--t2)')}
+          ${kpi('En progreso', inProgCount, svgWrench,'var(--acc)')}
+          ${kpi('Vencidas',    overdueCount,svgAlert, 'var(--danger)')}
+          ${kpi('Completadas', doneCount,   svgCheck, 'var(--success)')}
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
+          <div style="display:flex;gap:4px;padding:3px;border-radius:99px;background:var(--row-b);border:1px solid var(--pill-br)">
+            ${TASK_STATUSES_F.map(s => pillBtn(s==='Todos'?'Todos':TASK_STATUS_LABEL[s], activeTaskStatus===s, `setTaskStatusFilter('${s}')`)).join('')}
+          </div>
+        </div>
+
+        ${tasks.length === 0
+          ? `<div class="glass" style="border-radius:12px;padding:48px;text-align:center;color:var(--t3);font-size:12px">Sin tareas${activeTaskStatus!=='Todos'?' con los filtros aplicados':''}. Creá una con el botón de arriba.</div>`
+          : `<div class="glass" style="border-radius:12px;overflow:hidden">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="border-bottom:1px solid var(--b1)">
+              ${['TAREA','RESPONSABLE','PRIORIDAD','ESTADO','VENCE',''].map(h =>
+                `<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:600;letter-spacing:0.07em;color:var(--t3)">${h}</th>`).join('')}
+            </tr></thead>
+            <tbody>
+              ${tasks.map((task, idx) => {
+                const overdue  = task.due_date && !['completado','cancelado'].includes(task.status) && new Date(task.due_date) < today;
+                const done     = task.status === 'completado';
+                const rowBg    = overdue ? 'rgba(239,68,68,0.06)' : (idx%2===0 ? 'transparent' : 'var(--row-b)');
+                const borderL  = overdue ? 'border-left:3px solid var(--danger);' : '';
+                const next     = TASK_STATUS_CYCLE[task.status];
+                const dueStr   = task.due_date ? new Date(task.due_date+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
+                const prioC    = TASK_PRIO_COLOR[task.priority]||'var(--t3)';
+                return `<tr style="border-bottom:1px solid var(--b1);background:${rowBg};${borderL}">
+                  <td style="padding:12px 16px;max-width:300px">
+                    <div style="font-weight:600;color:${done?'var(--t3)':'var(--t1)'};${done?'text-decoration:line-through':''}">${esc(task.title)}</div>
+                    ${task.description?`<div style="font-size:11px;color:var(--t3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px">${esc(task.description)}</div>`:''}
+                  </td>
+                  <td style="padding:12px 16px;color:${task.assignee?'var(--acc)':'var(--t3)'};font-weight:${task.assignee?'600':'400'}">${esc(task.assignee||'—')}</td>
+                  <td style="padding:12px 16px">
+                    <span style="padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:0.05em;background:${prioC}22;color:${prioC}">
+                      ${TASK_PRIO_LABEL[task.priority]||esc(task.priority)}
+                    </span>
+                  </td>
+                  <td style="padding:12px 16px">
+                    ${next
+                      ? `<button onclick="cycleTaskStatus('${task.id}','${next}')" title="Click para avanzar"
+                          style="padding:4px 10px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:0.04em;border:none;cursor:pointer;font-family:inherit;background:${TASK_STATUS_BG[task.status]||'var(--row-b)'};color:${TASK_STATUS_FG[task.status]||'var(--t2)'};transition:opacity 0.15s"
+                          onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">
+                          ${TASK_STATUS_LABEL[task.status]}
+                        </button>`
+                      : `<span style="padding:4px 10px;border-radius:99px;font-size:10px;font-weight:700;background:${TASK_STATUS_BG[task.status]||'var(--row-b)'};color:${TASK_STATUS_FG[task.status]||'var(--t3)'}">
+                          ${TASK_STATUS_LABEL[task.status]||esc(task.status)}
+                        </span>`}
+                  </td>
+                  <td style="padding:12px 16px;color:${overdue?'var(--danger)':'var(--t2)'};font-weight:${overdue?'600':'400'};white-space:nowrap">
+                    ${overdue?'⚠ ':''}${dueStr}
+                  </td>
+                  <td style="padding:12px 16px;white-space:nowrap;text-align:right">
+                    <button onclick="openTaskModal('${task.id}')"
+                      style="padding:4px 9px;border-radius:6px;border:1px solid var(--b1);background:transparent;color:var(--t2);cursor:pointer;font-size:11px;font-family:inherit;margin-right:4px;transition:all 0.15s"
+                      onmouseover="this.style.borderColor='var(--acc)';this.style.color='var(--acc)'" onmouseout="this.style.borderColor='var(--b1)';this.style.color='var(--t2)'">Editar</button>
+                    <button onclick="deleteTask('${task.id}')"
+                      style="padding:4px 9px;border-radius:6px;border:1px solid var(--b1);background:transparent;color:var(--t3);cursor:pointer;font-size:11px;font-family:inherit;transition:all 0.15s"
+                      onmouseover="this.style.borderColor='var(--danger)';this.style.color='var(--danger)'" onmouseout="this.style.borderColor='var(--b1)';this.style.color='var(--t3)'">✕</button>
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>`}
+
+        <!-- Modal nueva/editar tarea -->
+        <div id="task-modal" onclick="if(event.target===this)closeTaskModal()"
+          style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);z-index:1000;align-items:center;justify-content:center;padding:20px">
+          <div class="glass" style="border-radius:16px;padding:32px;width:100%;max-width:540px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">
+            <h3 id="task-modal-title" style="font-size:16px;font-weight:700;color:var(--t1);margin:0 0 24px">Nueva Tarea</h3>
+            <input type="hidden" id="task-id-input">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div>
+                <label style="display:block;font-size:10px;font-weight:700;color:var(--t3);letter-spacing:0.08em;margin-bottom:6px">TÍTULO *</label>
+                <input id="task-title-input" type="text" placeholder="Descripción de la tarea…"
+                  style="width:100%;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--t1);background:var(--row-b);border:1px solid var(--b1);font-family:inherit;box-sizing:border-box;transition:border-color 0.15s;outline:none"
+                  onfocus="this.style.borderColor='rgba(59,107,247,0.5)'" onblur="this.style.borderColor=''">
+              </div>
+              <div>
+                <label style="display:block;font-size:10px;font-weight:700;color:var(--t3);letter-spacing:0.08em;margin-bottom:6px">DESCRIPCIÓN</label>
+                <textarea id="task-desc-input" placeholder="Detalles adicionales…" rows="3"
+                  style="width:100%;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--t1);background:var(--row-b);border:1px solid var(--b1);font-family:inherit;box-sizing:border-box;resize:vertical;outline:none;transition:border-color 0.15s"
+                  onfocus="this.style.borderColor='rgba(59,107,247,0.5)'" onblur="this.style.borderColor=''"></textarea>
+              </div>
+              <div>
+                <label style="display:block;font-size:10px;font-weight:700;color:var(--t3);letter-spacing:0.08em;margin-bottom:6px">RESPONSABLE</label>
+                <input id="task-assignee-input" type="text" placeholder="Nombre…"
+                  style="width:100%;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--t1);background:var(--row-b);border:1px solid var(--b1);font-family:inherit;box-sizing:border-box;outline:none;transition:border-color 0.15s"
+                  onfocus="this.style.borderColor='rgba(59,107,247,0.5)'" onblur="this.style.borderColor=''">
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                <div>
+                  <label style="display:block;font-size:10px;font-weight:700;color:var(--t3);letter-spacing:0.08em;margin-bottom:6px">PRIORIDAD</label>
+                  <select id="task-prio-input" style="width:100%;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--t1);background:var(--s1);border:1px solid var(--b1);font-family:inherit;box-sizing:border-box;outline:none">
+                    <option value="baja">Baja</option>
+                    <option value="media">Media</option>
+                    <option value="alta">Alta</option>
+                    <option value="urgente">Urgente</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="display:block;font-size:10px;font-weight:700;color:var(--t3);letter-spacing:0.08em;margin-bottom:6px">ESTADO</label>
+                  <select id="task-status-input" style="width:100%;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--t1);background:var(--s1);border:1px solid var(--b1);font-family:inherit;box-sizing:border-box;outline:none">
+                    <option value="pendiente">Pendiente</option>
+                    <option value="en_progreso">En progreso</option>
+                    <option value="completado">Completado</option>
+                    <option value="cancelado">Cancelado</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="display:block;font-size:10px;font-weight:700;color:var(--t3);letter-spacing:0.08em;margin-bottom:6px">VENCE</label>
+                  <input id="task-due-input" type="date"
+                    style="width:100%;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--t1);background:var(--s1);border:1px solid var(--b1);font-family:inherit;box-sizing:border-box;outline:none;transition:border-color 0.15s"
+                    onfocus="this.style.borderColor='rgba(59,107,247,0.5)'" onblur="this.style.borderColor=''">
+                </div>
+              </div>
+            </div>
+            <div id="task-modal-error" style="display:none;margin-top:12px;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,0.12);color:#FCA5A5;font-size:12px"></div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:24px">
+              <button onclick="closeTaskModal()"
+                style="padding:9px 20px;border-radius:8px;border:1px solid var(--b1);background:transparent;color:var(--t2);cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:all 0.15s">
+                Cancelar
+              </button>
+              <button id="task-submit-btn" onclick="submitTask()"
+                style="padding:9px 20px;border-radius:8px;border:none;background:var(--acc);color:#fff;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:opacity 0.15s">
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    window.openTaskModal = function(id) {
+      const modal = document.getElementById('task-modal');
+      if (!modal) return;
+      const isEdit = !!id;
+      document.getElementById('task-modal-title').textContent = isEdit ? 'Editar Tarea' : 'Nueva Tarea';
+      document.getElementById('task-id-input').value = id || '';
+      document.getElementById('task-modal-error').style.display = 'none';
+      if (isEdit) {
+        const task = D.tasks.find(t => t.id === id);
+        if (task) {
+          document.getElementById('task-title-input').value    = task.title || '';
+          document.getElementById('task-desc-input').value     = task.description || '';
+          document.getElementById('task-assignee-input').value = task.assignee || '';
+          document.getElementById('task-prio-input').value     = task.priority || 'media';
+          document.getElementById('task-status-input').value   = task.status || 'pendiente';
+          document.getElementById('task-due-input').value      = task.due_date || '';
+        }
+      } else {
+        document.getElementById('task-title-input').value    = '';
+        document.getElementById('task-desc-input').value     = '';
+        document.getElementById('task-assignee-input').value = '';
+        document.getElementById('task-prio-input').value     = 'media';
+        document.getElementById('task-status-input').value   = 'pendiente';
+        document.getElementById('task-due-input').value      = '';
+      }
+      modal.style.display = 'flex';
+      setTimeout(() => document.getElementById('task-title-input')?.focus(), 60);
+    };
+
+    window.closeTaskModal = function() {
+      const modal = document.getElementById('task-modal');
+      if (modal) modal.style.display = 'none';
+    };
+
+    window.submitTask = async function() {
+      const title = document.getElementById('task-title-input').value.trim();
+      const errEl = document.getElementById('task-modal-error');
+      if (!title) {
+        errEl.textContent = 'El título es obligatorio.';
+        errEl.style.display = 'block';
+        return;
+      }
+      errEl.style.display = 'none';
+      const id  = document.getElementById('task-id-input').value;
+      const btn = document.getElementById('task-submit-btn');
+      btn.textContent = 'Guardando…'; btn.disabled = true;
+
+      const payload = {
+        title,
+        description: document.getElementById('task-desc-input').value.trim() || null,
+        assignee:    document.getElementById('task-assignee-input').value.trim() || null,
+        priority:    document.getElementById('task-prio-input').value,
+        status:      document.getElementById('task-status-input').value,
+        due_date:    document.getElementById('task-due-input').value || null,
+        updated_at:  new Date().toISOString(),
+      };
+
+      const result = id
+        ? await sb.from('tasks').update(payload).eq('id', id)
+        : await sb.from('tasks').insert(payload);
+
+      if (result.error) {
+        errEl.textContent = result.error.message;
+        errEl.style.display = 'block';
+        btn.textContent = 'Guardar'; btn.disabled = false;
+        return;
+      }
+      closeTaskModal();
+      await loadAll();
+    };
+
+    window.cycleTaskStatus = async function(id, nextStatus) {
+      await sb.from('tasks').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', id);
+      await loadAll();
+    };
+
+    window.deleteTask = async function(id) {
+      if (!confirm('¿Eliminar esta tarea?')) return;
+      await sb.from('tasks').delete().eq('id', id);
+      await loadAll();
+    };
+
+    window.setTaskStatusFilter = function(s) { activeTaskStatus = s; render(); };
+    window.setTaskTeamFilter   = function(t) { activeTaskTeam   = t; render(); };
 
     // ── BOOTSTRAP ──────────────────────────────────────────────────────
     if (localStorage.getItem('spec-theme') === 'light') {

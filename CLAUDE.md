@@ -26,7 +26,7 @@ Zoho API ────┘                                          │
 - **MCP access:** available via `.mcp.json` — apply schema via MCP or SQL Editor
 - **Schema:** `schema.sql` (idempotente, seguro para re-ejecutar con IF NOT EXISTS)
 - **Security model:** anon key is hardcoded in client JS — this is intentional. Security comes from RLS policies (public read, service_role write from n8n only). Do not treat this as a vulnerability.
-- **Realtime:** subscriptions on 5 tables (`projects`, `installations`, `tickets`, `orders`, `status_log`) — no polling needed in the frontend.
+- **Realtime:** subscriptions on 6 tables (`projects`, `installations`, `tickets`, `orders`, `status_log`, `tasks`) — no polling needed in the frontend.
 - **Aplicar schema:** ir a [SQL Editor](https://supabase.com/dashboard/project/osnttxgmsfudghinxfat/sql/new) y ejecutar `schema.sql` completo.
 
 ## Frontend Constraints
@@ -40,9 +40,17 @@ Zoho API ────┘                                          │
 
 **Team selector:** top-level tabs "netTime" / "SPECManager" that apply `.eq('team', activeTeam)` to every Supabase query. Same HTML, different filter — not two pages.
 
-**Sections:** Resumen (KPI cards + últimos movimientos instalaciones), Proyectos (kanban + progress bar), Instalaciones (table), Tickets (table + iframe to `https://n8n.vive-ia.com/webhook/zammad-dashboard`), Pedidos, Historial (status_log timeline — solo instalaciones).
+**Sections (nav order):** Resumen, Proyectos, Instalaciones, Tickets, Pedidos, **Tareas Internas**, Historial.
 
-**`D` object:** `{ projects, installations, tickets, orders, log }` — no services.
+- Resumen: KPI cards + últimos movimientos instalaciones
+- Proyectos: kanban + progress bar
+- Instalaciones: table
+- Tickets: table + iframe to `https://n8n.vive-ia.com/webhook/zammad-dashboard`
+- Pedidos: table
+- **Tareas Internas**: gestión de tareas internas del equipo (CRUD completo desde el frontend)
+- Historial: status_log timeline — solo instalaciones
+
+**`D` object:** `{ projects, installations, tickets, orders, log, tasks }`
 
 ### Theming (dark/light mode)
 
@@ -63,6 +71,19 @@ All JS-generated HTML uses these variables in inline styles — never hardcode `
 **Zammad iframe:** the dark KPI band at the top of Tickets section is an external iframe from n8n — its styling cannot be controlled from `index.html`.
 
 **Select dropdowns:** all `<select>` and `<option>` have global CSS rules for dark/light contrast — never style options inline without matching both modes.
+
+### Tareas Internas
+
+- Tab "TAREAS INTERNAS" posicionado antes de HISTORIAL en el nav.
+- CRUD completo: crear, editar, eliminar, ciclar estado desde el frontend (anon key con políticas RLS de escritura en `tasks`).
+- **Sin filtro de equipo** — el campo `team` no se muestra ni en tabla ni en modal; la DB usa el default `netTime`.
+- Campos del modal: título (obligatorio), descripción, responsable, prioridad (baja/media/alta/urgente), estado, fecha de vencimiento.
+- Tabla: TAREA, RESPONSABLE, PRIORIDAD, ESTADO (badge clickeable que cicla), VENCE, acciones (Editar / ✕).
+- Filas vencidas: `border-left:3px solid var(--danger)` + fondo rojo tenue + ⚠ en fecha.
+- Estado cicla: `pendiente → en_progreso → completado → pendiente`; cancelado solo vía modal.
+- KPI cards: Pendientes, En progreso, Vencidas, Completadas.
+- Filtro de estado (pills): Todos / Pendiente / En progreso / Completado / Cancelado.
+- `tasks` es la única tabla donde el anon key puede INSERT/UPDATE/DELETE (tool interno protegido por Netlify Identity en prod).
 
 ### Resumen & Historial — solo instalaciones
 
@@ -88,8 +109,8 @@ URLs:
 
 ## Current Status
 
-- `index.html` — ✅ completo. Sin servicios, sin Telegram en frontend. Anon key hardcoded. Branding Grupo SPEC (Plus Jakarta Sans, paleta corporativa, logo via `logo.png`). Light/dark toggle, fechas absolutas, columna zammad_id + zammad_number, stale ticket alerts, CSS variable theming completo. Resumen e Historial filtrados a instalaciones.
-- `schema.sql` — ✅ idempotente (IF NOT EXISTS + DO $$ EXCEPTION en enums/policies). Sin tabla services. Migraciones idempotentes: `nivel_soporte`, `time_unit`, `zammad_number` en tickets.
+- `index.html` — ✅ completo. Sin servicios, sin Telegram en frontend. Anon key hardcoded. Branding Grupo SPEC (Plus Jakarta Sans, paleta corporativa, logo via `logo.png`). Light/dark toggle, fechas absolutas, columna zammad_id + zammad_number, stale ticket alerts, CSS variable theming completo. Resumen e Historial filtrados a instalaciones. Sección TAREAS INTERNAS con CRUD completo.
+- `schema.sql` — ✅ idempotente (IF NOT EXISTS + DO $$ EXCEPTION en enums/policies). Sin tabla services. Migraciones idempotentes: `nivel_soporte`, `time_unit`, `zammad_number` en tickets. Tabla `tasks` con RLS (anon puede leer y escribir).
 - `logo.png` — ✅ en raíz del proyecto.
 - Supabase MCP — ✅ configurado en `.mcp.json` (`osnttxgmsfudghinxfat`).
 - n8n MCP — ✅ configurado en `.mcp.json` via HTTP transport (`https://n8n.vive-ia.com/mcp-server/http`).
