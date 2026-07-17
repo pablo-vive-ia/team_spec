@@ -60,6 +60,8 @@ CSS variables in `:root` (dark defaults) overridden in `body.light`. Key variabl
 --card-b:  rgba(255,255,255,0.06)  /* dark */ / rgba(0,0,0,0.08)  /* light */
 --row-b:   rgba(255,255,255,0.04)  /* dark */ / rgba(0,0,0,0.05)  /* light */
 --pill-br: rgba(255,255,255,0.07)  /* dark */ / rgba(0,0,0,0.10)  /* light */
+--t2:      #94AABF  /* dark */ / #4E6680  /* light */  — texto secundario
+--t3:      #5B7A96  /* dark */ / #7B95AA  /* light */  — labels, headers de tabla, sec-label
 ```
 
 All JS-generated HTML uses these variables in inline styles — never hardcode `rgba(255,255,255,...)` directly in template literals.
@@ -81,7 +83,7 @@ All JS-generated HTML uses these variables in inline styles — never hardcode `
 - Tabla: TAREA, RESPONSABLE, PRIORIDAD, ESTADO (badge clickeable que cicla), VENCE, acciones (Editar / ✕).
 - Filas vencidas: `border-left:3px solid var(--danger)` + fondo rojo tenue + ⚠ en fecha.
 - Estado cicla: `pendiente → en_progreso → completado → pendiente`; cancelado solo vía modal.
-- KPI cards: Pendientes, En progreso, Vencidas, Completadas.
+- Stats compactos (chips horizontales, no kpi()): Pendientes, En progreso, Vencidas, Completadas — usan layout flex en lugar del grid de kpi() grande.
 - Filtro de estado (pills): Todos / Pendiente / En progreso / Completado / Cancelado.
 - `tasks` es la única tabla donde el anon key puede INSERT/UPDATE/DELETE (tool interno protegido por Netlify Identity en prod).
 
