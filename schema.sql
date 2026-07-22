@@ -180,3 +180,37 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN
   CREATE POLICY "eliminacion interna" ON tasks FOR DELETE USING (true);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- ============================================================
+-- TEAM ACTIVITIES (Actividades Equipo) — sync de registros de tiempo Zoho
+-- Proyecto Zoho: "PR-17 .ACTIVIDAD EQUIPO TECNICO" (id 1972504000000057737)
+-- Sin distinción de equipo — transversal a todo el equipo técnico
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS team_activities (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  zoho_log_id text UNIQUE NOT NULL,
+  activity text NOT NULL,
+  user_name text,
+  team team_name NOT NULL DEFAULT 'netTime',
+  log_date date NOT NULL,
+  hours numeric NOT NULL DEFAULT 0,
+  notes text,
+  bill_status text,
+  approval_status text,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_activities_log_date ON team_activities(log_date);
+CREATE INDEX IF NOT EXISTS idx_team_activities_activity  ON team_activities(activity);
+
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE team_activities;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+ALTER TABLE team_activities ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  CREATE POLICY "lectura publica" ON team_activities FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;

@@ -40,7 +40,7 @@ Zoho API ────┘                                          │
 
 **Team selector:** top-level tabs "netTime" / "SPECManager" that apply `.eq('team', activeTeam)` to every Supabase query. Same HTML, different filter — not two pages.
 
-**Sections (nav order):** Resumen, Proyectos, Instalaciones, Tickets, Pedidos, **Tareas Internas**, Historial.
+**Sections (nav order):** Resumen, Proyectos, Instalaciones, Tickets, Pedidos, **Tareas Internas**, **Actividades Equipo**, Historial.
 
 - Resumen: KPI cards + últimos movimientos instalaciones
 - Proyectos: kanban + progress bar
@@ -48,9 +48,10 @@ Zoho API ────┘                                          │
 - Tickets: table + iframe to `https://n8n.vive-ia.com/webhook/zammad-dashboard`
 - Pedidos: table
 - **Tareas Internas**: gestión de tareas internas del equipo (CRUD completo desde el frontend)
+- **Actividades Equipo**: resumen de registros de tiempo del equipo técnico sincronizados desde Zoho (solo lectura, sync-only)
 - Historial: status_log timeline — solo instalaciones
 
-**`D` object:** `{ projects, installations, tickets, orders, log, tasks }`
+**`D` object:** `{ projects, installations, tickets, orders, log, tasks, activities }`
 
 ### Theming (dark/light mode)
 
@@ -87,6 +88,18 @@ All JS-generated HTML uses these variables in inline styles — never hardcode `
 - Filtro de estado (pills): Todos / Pendiente / En progreso / Completado / Cancelado.
 - `tasks` es la única tabla donde el anon key puede INSERT/UPDATE/DELETE (tool interno protegido por Netlify Identity en prod).
 
+### Actividades Equipo
+
+- Tab "ACTIVIDADES EQUIPO" posicionado entre Tareas Internas e Historial.
+- **Sin filtro de equipo** — igual que Tareas Internas, el campo `team` no se filtra en la UI (siempre default `netTime`); Zoho clasifica el proyecto origen bajo el grupo "SPEC ARGENTINA", que no mapea limpio a netTime/SPECManager, así que la sección es transversal a todo el equipo técnico.
+- Origen: proyecto Zoho Projects **"PR-17 .ACTIVIDAD EQUIPO TECNICO"** (id `1972504000000057737`, portal `grupospeclatam`). Las "categorías" que se ven (COMERCIAL_SOPORTE, REUNIONES_INTERNAS, PROYECTOS, SOPORTE_TICKETS, SOPORTE_INTERNO, PEDIDOS_REUNIONES, PEDIDOS_PREPARACION, PEDIDO_REMITOS, N/A, CAPACITACION, etc.) son **nombres de Tareas Zoho** dentro de ese proyecto — cada persona carga horas contra una de ellas.
+- Tabla `team_activities`: solo lectura desde el frontend (anon key), escritura exclusiva vía service_role desde n8n — mismo modelo que `tickets`/`orders`. Sin CRUD manual, sin `status_log` (no hay máquina de estados en un registro de tiempo).
+- Filtros: período (hoy/semana/mes/mes anterior/3m/6m/año/todo, sobre `log_date`), técnico (`user_name`, data-driven, sin lista canónica), categoría (`activity`, data-driven).
+- KPIs: horas totales, registros, técnicos activos, categoría top del período/filtro activo.
+- Gráfico de horas por categoría: **barras horizontales** (no donut/pie — con ~17 categorías posibles un pie sería ilegible; se siguió la guía del skill `dataviz`, que para part-to-whole con muchas categorías recomienda barra horizontal). Color por categoría es **fijo por volumen global** (se calcula sobre `D.activities` completo, no sobre el filtrado) — así el color de una categoría nunca cambia al aplicar filtros. Top 6 categorías usan los acentos existentes de la app (`--acc`, `--acc2`, `--acc3`, `--success`, `--warn`, `--danger`); el resto cae en gris neutro (`--t3`), sin generar hues nuevos.
+- Tabla secundaria "por técnico" (horas totales, registros, categoría más frecuente) + tabla de registros individuales (fecha, técnico, categoría con badge de color, horas, notas).
+- Export CSV/PDF con el mismo template que Proyectos/Pedidos (`window._actividadesExportData`).
+
 ### Resumen & Historial — solo instalaciones
 
 - **Resumen** "ÚLTIMOS MOVIMIENTOS": filtra `D.log` a `entity_type === 'installation'`, muestra los últimos 5.
@@ -99,7 +112,7 @@ All JS-generated HTML uses these variables in inline styles — never hardcode `
 | Workflow | ID | Trigger | Target tables |
 |---|---|---|---|
 | `zammad-sync-supabase` | `votsdMSzgAHnTSA0` | Cron 15 min | `tickets`, `status_log` |
-| `zoho-projects-sync-supabase` | `bbnieKNegHRGrfvF` | Cron 12h | `projects`, `orders`, `status_log` |
+| `zoho-projects-sync-supabase` | `bbnieKNegHRGrfvF` | Cron 4h (nodo se llama "Cron 4hs"; CLAUDE.md decía 12h, desactualizado) | `projects`, `orders`, `status_log`, `team_activities` |
 | `telegram-status-update` | `SjD5aAOWywPS92eM` | Telegram voice/text | `installations` + `status_log` |
 
 URLs:
@@ -111,8 +124,8 @@ URLs:
 
 ## Current Status
 
-- `index.html` — ✅ completo. Sin servicios, sin Telegram en frontend. Anon key hardcoded. Branding Grupo SPEC (Plus Jakarta Sans, paleta corporativa, logo via `logo.png`). Light/dark toggle, fechas absolutas, columna zammad_id + zammad_number, stale ticket alerts, CSS variable theming completo. Resumen e Historial filtrados a instalaciones. Sección TAREAS INTERNAS con CRUD completo.
-- `schema.sql` — ✅ idempotente (IF NOT EXISTS + DO $$ EXCEPTION en enums/policies). Sin tabla services. Migraciones idempotentes: `nivel_soporte`, `time_unit`, `zammad_number` en tickets. Tabla `tasks` con RLS (anon puede leer y escribir).
+- `index.html` — ✅ completo. Sin servicios, sin Telegram en frontend. Anon key hardcoded. Branding Grupo SPEC (Plus Jakarta Sans, paleta corporativa, logo via `logo.png`). Light/dark toggle, fechas absolutas, columna zammad_id + zammad_number, stale ticket alerts, CSS variable theming completo. Resumen e Historial filtrados a instalaciones. Sección TAREAS INTERNAS con CRUD completo. Sección ACTIVIDADES EQUIPO (solo lectura) con KPIs, barras horizontales por categoría, filtros período/técnico/categoría, tabla por técnico y export CSV/PDF — ✅ sincronizando datos reales desde Zoho (755 registros del año en curso al 2026-07-22).
+- `schema.sql` — ✅ idempotente (IF NOT EXISTS + DO $$ EXCEPTION en enums/policies). Sin tabla services. Migraciones idempotentes: `nivel_soporte`, `time_unit`, `zammad_number` en tickets. Tabla `tasks` con RLS (anon puede leer y escribir). Tabla `team_activities` con RLS (anon solo lectura, escritura vía service_role/n8n) ✅ aplicada en Supabase.
 - `logo.png` — ✅ en raíz del proyecto.
 - Supabase MCP — ✅ configurado en `.mcp.json` (`osnttxgmsfudghinxfat`).
 - n8n MCP — ✅ configurado en `.mcp.json` via HTTP transport (`https://n8n.vive-ia.com/mcp-server/http`).
@@ -160,6 +173,24 @@ Los "pedidos" son **milestones** (hitos con prefijo "H-") en el proyecto GESTION
 - **Fetch Pedidos**: `GET https://projectsapi.zoho.com/restapi/portal/grupospeclatam/projects/1972504000000679075/milestones/`
 - **Portal**: `grupospeclatam` | **Proyecto GESTION_PEDIDOS ID**: `1972504000000679075`
 - Parámetros `?status=active` y `?status=open` dan error 400 en ambos endpoints — no usar.
+
+### Actividades Equipo — Time Logs de Zoho
+
+Rama nueva (agregada 2026-07-22) dentro del mismo workflow `zoho-projects-sync-supabase`, colgando del mismo Cron. **✅ Activa y sincronizando datos reales** (verificado 2026-07-22: 755 registros, 5 técnicos, 14 categorías, desde 02/01/2026 hasta la fecha).
+
+- **Endpoint:** `GET /restapi/portal/grupospeclatam/projects/1972504000000057737/logs/` — Time Tracking API de Zoho Projects, no la de tasks/milestones. Parámetros usados (todos necesarios, la API tira `400 — "Input Parameter Missing"` (código 6831) si falta cualquiera):
+  - `view_type=custom_date`
+  - `date=MM-DD-YYYY` (hoy) — **requerido incluso usando `custom_date`**, la doc no lo deja claro pero la API lo exige igual.
+  - `custom_date={"start_date":"MM-DD-YYYY","end_date":"MM-DD-YYYY"}` (URL-encoded con `encodeURIComponent(JSON.stringify(...))` — con las keys quotadas; la variante sin comillas tipo objeto JS rompe el request con un 400 de gateway, no llega a la capa de API)
+  - `users_list=all`
+  - `bill_status=all` — **en minúscula**. `All` (con mayúscula, como lo documenta la ayuda de Zoho) también tira 6831. Esto costó varias vueltas de debugging.
+  - `component_type=task` — las categorías (COMERCIAL_SOPORTE, etc.) son nombres de Tareas Zoho, así que `task` alcanza.
+  - `index=N&range=200` para paginación.
+- **Scope OAuth:** requiere `ZohoProjects.timesheets.READ`, agregado a la credencial `Zoho_project` el 2026-07-22 (re-autorización manual, ya hecha — ✅ resuelto).
+- **Nodos:** `Fetch Estado Actividades` (Supabase, `max(log_date)` de `team_activities`) → `Preparar Ventanas Actividades` (Code: decide backfill vs. ventana incremental) → `Fetch Time Logs Zoho` (HTTP, per-item sobre las URLs generadas, `onError: continueRegularOutput`) → `Normalizar Actividades Zoho` (Code: aplana `timelogs.date[].tasklogs[]`, `hours = total_minutes/60`) → `Buscar Actividades Supabase` (getAll, `executeOnce`) → `Agrupar Actividades Supabase` (Aggregate) → `Comparar Actividades` (Code: dedupe por `zoho_log_id`, decide create/update) → `Actividad nueva o existente?` (IF) → `Actualizar Actividad` / `Crear Actividad` (Supabase).
+- **⚠️ Gotcha de n8n MCP importante:** al crear nodos con `addNode` via el MCP de n8n, propiedades de nodo como `onError`, `alwaysOutputData` y `executeOnce` **no se guardan** si se las pasa dentro del objeto `node` — el schema de `addNode` no las acepta ahí (se silencian sin error). Hay que setearlas aparte con una operación `setNodeSettings` después de crear el nodo. Nos mordió dos veces acá: `Fetch Estado Actividades`/`Buscar Actividades Supabase`/`Agrupar Actividades Supabase` quedaron sin `alwaysOutputData`, y como Supabase `getAll` sobre una tabla vacía devuelve 0 filas, **n8n no ejecuta los nodos siguientes cuando un nodo entrega 0 items** — toda la rama corría "success" pero no escribía nada, sin ningún error visible. Si se agregan más nodos a este workflow (u otros) vía MCP, verificar siempre estas 3 propiedades con una llamada separada de `setNodeSettings`, no asumir que `addNode` las tomó.
+- **Backfill vs. incremental:** si `team_activities` está vacía, genera ventanas de 6 meses (tope de la API) cubriendo **solo el año en curso** (decisión 2026-07-22, para que la primera corrida tarde ~30s en vez de +20 min escaneando 6 años de historial) × hasta 3 páginas de `range=200` cada una. Si ya hay datos, una sola ventana desde el último `log_date` sincronizado (con 3 días de margen) hasta hoy. **Pendiente si se quiere:** ampliar el backfill inicial a todo el histórico de Zoho (antes de 2026) — hoy la lógica de "backfill completo" solo cubre el año actual, no el histórico completo del proyecto.
+- Sin nodo de `status_log` — los registros de tiempo no tienen máquina de estados.
 
 ## Zammad Sync — Estado Detallado
 
@@ -249,17 +280,19 @@ Al crear una instalación nueva, el LLM devuelve `entity_id: null` (el registro 
 
 | Credencial | ID | Tipo | Workflow |
 |---|---|---|---|
-| `Zoho_project` | — | OAuth2 genérico | `zoho-projects-sync-supabase` |
+| `Zoho_project` | `NOU6b5QLMtHeOXgm` | OAuth2 genérico | `zoho-projects-sync-supabase` — ✅ scope `ZohoProjects.timesheets.READ` agregado 2026-07-22 (re-autorizado manualmente) |
 | `Team_Spec` | — | Telegram API | `telegram-status-update` |
 | `CEO_vive_Supabase` | `5wD9YEVcOOK8Xchb` | supabaseApi | `zammad-sync-supabase` |
 | `Zammad API` | — | Header Auth (`Authorization: Token token=...`) | `zammad-sync-supabase` ⏳ pendiente |
 
 ## Pendientes para activar todo
 
-1. **Aplicar schema.sql** en Supabase SQL Editor — ejecutar el archivo completo (idempotente, seguro)
+1. **Aplicar schema.sql** en Supabase SQL Editor — ✅ ya aplicado (incluye `team_activities`)
 2. **Zammad credential** — crear `Zammad API` (Header Auth, `Authorization: Token token=TU_TOKEN`) y activar workflow `votsdMSzgAHnTSA0`
 3. **Re-guardar `CEO_vive_Supabase`** en n8n para refrescar schema cache (abrir credencial → guardar sin cambios)
 4. **Netlify deploy** — drag & drop de la carpeta (sin `netlify.toml`)
+5. ~~Re-autorizar `Zoho_project`~~ — ✅ hecho 2026-07-22, rama de Actividades Equipo sincronizando datos reales (755 registros del año en curso)
+6. **Opcional:** ampliar el backfill de Actividades Equipo a todo el histórico de Zoho (hoy solo trae el año en curso, ver "Actividades Equipo — Time Logs de Zoho" arriba) — requiere correr el workflow manualmente con la ventana temporal ampliada, dado que el sync incremental normal ya no volvería a hacer backfill una vez que la tabla tiene datos
 
 ## n8n MCP
 

@@ -300,6 +300,7 @@
         <button id="nav-tickets"       onclick="switchSection('tickets')"       class="nav-btn" style="padding:11px 16px;font-size:11px;font-weight:500;letter-spacing:0.07em;white-space:nowrap;position:relative;background:transparent;border:none;cursor:pointer;font-family:inherit;transition:color 0.15s;color:var(--t3)">TICKETS</button>
         <button id="nav-pedidos"       onclick="switchSection('pedidos')"       class="nav-btn" style="padding:11px 16px;font-size:11px;font-weight:500;letter-spacing:0.07em;white-space:nowrap;position:relative;background:transparent;border:none;cursor:pointer;font-family:inherit;transition:color 0.15s;color:var(--t3)">PEDIDOS</button>
         <button id="nav-tareas"        onclick="switchSection('tareas')"        class="nav-btn" style="padding:11px 16px;font-size:11px;font-weight:500;letter-spacing:0.07em;white-space:nowrap;position:relative;background:transparent;border:none;cursor:pointer;font-family:inherit;transition:color 0.15s;color:var(--t3)">TAREAS INTERNAS</button>
+        <button id="nav-actividades"   onclick="switchSection('actividades')"   class="nav-btn" style="padding:11px 16px;font-size:11px;font-weight:500;letter-spacing:0.07em;white-space:nowrap;position:relative;background:transparent;border:none;cursor:pointer;font-family:inherit;transition:color 0.15s;color:var(--t3)">ACTIVIDADES EQUIPO</button>
         <button id="nav-historial"     onclick="switchSection('historial')"     class="nav-btn" style="padding:11px 16px;font-size:11px;font-weight:500;letter-spacing:0.07em;white-space:nowrap;position:relative;background:transparent;border:none;cursor:pointer;font-family:inherit;transition:color 0.15s;color:var(--t3)">HISTORIAL</button>
       </div>
     </div>
@@ -363,7 +364,10 @@
     let filterPedidoClient  = '';
     let nivelTableSort  = {col:'count', dir:-1};
     let estadoTableSort = {col:'count', dir:-1};
-    let D = { projects:[], installations:[], tickets:[], orders:[], log:[], tasks:[] };
+    let activeActUser     = 'Todos';
+    let activeActCategory = 'Todos';
+    let activeActPeriod   = 'mes';
+    let D = { projects:[], installations:[], tickets:[], orders:[], log:[], tasks:[], activities:[] };
     let sortState = {
       proyectos:     { col: 'progress_pct', dir: -1 },
       pedidos:       { col: 'progress_pct', dir: -1 },
@@ -378,17 +382,18 @@
     // ── CARGA ──────────────────────────────────────────────────────────
     async function loadAll(animated = false) {
       const opts = { ascending: false };
-      const [p,i,t,o,l,tk] = await Promise.all([
+      const [p,i,t,o,l,tk,ac] = await Promise.all([
         sb.from('projects').select('*').order('updated_at',opts),
         sb.from('installations').select('*').order('updated_at',opts),
         sb.from('tickets').select('*').order('updated_at',opts),
         sb.from('orders').select('*').order('updated_at',opts),
         sb.from('status_log').select('*').order('created_at',opts).limit(200),
         sb.from('tasks').select('*').order('created_at',opts),
+        sb.from('team_activities').select('*').order('log_date',opts),
       ]);
-      const err = [p,i,t,o,l,tk].find(r => r.error);
+      const err = [p,i,t,o,l,tk,ac].find(r => r.error);
       if (err?.error) { console.error(err.error); showError(err.error.message); return; }
-      D = { projects:p.data||[], installations:i.data||[], tickets:t.data||[], orders:o.data||[], log:l.data||[], tasks:tk.data||[] };
+      D = { projects:p.data||[], installations:i.data||[], tickets:t.data||[], orders:o.data||[], log:l.data||[], tasks:tk.data||[], activities:ac.data||[] };
       render(animated);
     }
 
@@ -405,7 +410,7 @@
     function subscribeRealtime() {
       rtChannels.forEach(c => sb.removeChannel(c));
       rtChannels.length = 0;
-      ['projects','installations','tickets','orders','status_log','tasks'].forEach(table => {
+      ['projects','installations','tickets','orders','status_log','tasks','team_activities'].forEach(table => {
         const ch = sb.channel(`rt_${table}`)
           .on('postgres_changes', { event:'*', schema:'public', table }, () => loadAll())
           .subscribe(status => {
@@ -436,6 +441,9 @@
       filterPedidoClient  = '';
       activeProjectGroup  = 'Todos';
       activeTicketProduct = 'Todos';
+      activeActUser       = 'Todos';
+      activeActCategory   = 'Todos';
+      activeActPeriod     = 'mes';
       updateNavTabs();
       render(true);
     }
@@ -459,6 +467,7 @@
         pedidos:       renderPedidos,
         historial:     renderHistorial,
         tareas:        renderTareas,
+        actividades:   renderActividadesEquipo,
       };
       el.innerHTML = (map[activeSection] || renderResumen)();
       animatePbars();
@@ -520,6 +529,9 @@
     const svgBox    = `<svg viewBox="0 0 20 20" fill="currentColor" style="width:15px;height:15px"><path d="M4 3a2 2 0 100 4h12a2 2 0 100-4H4z"/><path fill-rule="evenodd" d="M3 8h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V8zm5 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>`;
     const svgCheck  = `<svg viewBox="0 0 20 20" fill="currentColor" style="width:15px;height:15px"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>`;
     const svgAlert  = `<svg viewBox="0 0 20 20" fill="currentColor" style="width:15px;height:15px"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>`;
+    const svgClock  = `<svg viewBox="0 0 20 20" fill="currentColor" style="width:15px;height:15px"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v5a1 1 0 00.293.707l3 3a1 1 0 001.414-1.414L11 9.586V5z" clip-rule="evenodd"/></svg>`;
+    const svgList   = `<svg viewBox="0 0 20 20" fill="currentColor" style="width:15px;height:15px"><path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 6a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 6a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>`;
+    const svgUser   = `<svg viewBox="0 0 20 20" fill="currentColor" style="width:15px;height:15px"><path fill-rule="evenodd" d="M10 9a4 4 0 100-8 4 4 0 000 8zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>`;
 
     function countUpAll() {
       document.querySelectorAll('[data-count]').forEach(el => {
@@ -2266,6 +2278,272 @@
 
     window.setTaskStatusFilter = function(s) { activeTaskStatus = s; render(); };
     window.setTaskTeamFilter   = function(t) { activeTaskTeam   = t; render(); };
+
+    // ── SECCIÓN: ACTIVIDADES EQUIPO ─────────────────────────────────────
+    const ACT_PERIODS = [
+      {id:'hoy',label:'Hoy'},{id:'semana',label:'Esta semana'},{id:'mes',label:'Este mes'},
+      {id:'mes_ant',label:'Mes anterior'},{id:'3m',label:'3 meses'},{id:'6m',label:'6 meses'},
+      {id:'anio',label:'Este año'},{id:'todo',label:'Todo'},
+    ];
+    function actPeriodStart(p) {
+      const n=new Date();
+      if(p==='hoy')    return new Date(n.getFullYear(),n.getMonth(),n.getDate());
+      if(p==='semana') { const d=new Date(n); d.setDate(d.getDate()-((d.getDay()+6)%7)); d.setHours(0,0,0,0); return d; }
+      if(p==='mes')    return new Date(n.getFullYear(),n.getMonth(),1);
+      if(p==='mes_ant')return new Date(n.getFullYear(),n.getMonth()-1,1);
+      if(p==='3m')     return new Date(n.getFullYear(),n.getMonth()-3,1);
+      if(p==='6m')     return new Date(n.getFullYear(),n.getMonth()-6,1);
+      if(p==='anio')   return new Date(n.getFullYear(),0,1);
+      return null; // 'todo'
+    }
+    function actPeriodEnd(p) {
+      if(p==='mes_ant'){const n=new Date();return new Date(n.getFullYear(),n.getMonth(),0,23,59,59);}
+      return null;
+    }
+
+    // Colores por categoría: orden fijo asignado por horas totales del dataset
+    // completo (no filtrado) — así el color de una categoría nunca cambia al
+    // aplicar filtros, solo depende de su volumen global. Más allá de las
+    // primeras 6 categorías, todas comparten el gris neutro "Otros".
+    const ACT_COLORS = ['var(--acc)','var(--acc2)','var(--acc3)','var(--success)','var(--warn)','var(--danger)'];
+    const ACT_OTHER_COLOR = 'var(--t3)';
+    function buildActivityColorMap(allActivities) {
+      const totals = {};
+      for (const a of allActivities) {
+        const key = a.activity || 'N/A';
+        totals[key] = (totals[key]||0) + (Number(a.hours)||0);
+      }
+      const ranked = Object.keys(totals).sort((x,y) => totals[y]-totals[x]);
+      const map = {};
+      ranked.forEach((cat, idx) => { map[cat] = idx < ACT_COLORS.length ? ACT_COLORS[idx] : ACT_OTHER_COLOR; });
+      return map;
+    }
+
+    function fmtHours(h) {
+      const totalMin = Math.round((h||0) * 60);
+      const hh = Math.floor(totalMin/60), mm = totalMin % 60;
+      return `${hh}:${String(mm).padStart(2,'0')}`;
+    }
+
+    function categoryBadge(cat, color) {
+      return `<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:5px;font-size:10px;font-weight:700;letter-spacing:0.03em;background:${color}22;border:1px solid ${color}44;color:${color}">
+        <span style="width:6px;height:6px;border-radius:50%;background:${color};flex-shrink:0"></span>${esc(cat)}
+      </span>`;
+    }
+
+    function renderActividadesEquipo() {
+      if (!D.activities.length) return `${sh('ACTIVIDADES EQUIPO')}${empty('actividades')}`;
+
+      const colorMap = buildActivityColorMap(D.activities);
+
+      const ps = actPeriodStart(activeActPeriod), pe = actPeriodEnd(activeActPeriod);
+      let byPeriod = D.activities;
+      if (ps) byPeriod = byPeriod.filter(a => a.log_date && new Date(a.log_date+'T00:00:00') >= ps);
+      if (pe) byPeriod = byPeriod.filter(a => a.log_date && new Date(a.log_date+'T00:00:00') <= pe);
+
+      const allUsers = ['Todos', ...new Set(byPeriod.map(a => a.user_name).filter(Boolean))].sort();
+      const allCats  = ['Todos', ...new Set(byPeriod.map(a => a.activity).filter(Boolean))].sort();
+
+      let filtered = byPeriod;
+      if (activeActUser !== 'Todos')     filtered = filtered.filter(a => a.user_name === activeActUser);
+      if (activeActCategory !== 'Todos') filtered = filtered.filter(a => a.activity === activeActCategory);
+
+      window._actividadesExportData = filtered;
+
+      const totalHours  = filtered.reduce((s,a) => s + (Number(a.hours)||0), 0);
+      const uniqueUsers = new Set(filtered.map(a => a.user_name).filter(Boolean)).size;
+
+      const catMap = {};
+      for (const a of filtered) {
+        const key = a.activity || 'N/A';
+        if (!catMap[key]) catMap[key] = { activity: key, hours: 0, count: 0 };
+        catMap[key].hours += Number(a.hours)||0;
+        catMap[key].count++;
+      }
+      const catRows = Object.values(catMap).sort((x,y) => y.hours - x.hours);
+      const topCat  = catRows[0];
+
+      const userMap = {};
+      for (const a of filtered) {
+        const key = a.user_name || 'Sin asignar';
+        if (!userMap[key]) userMap[key] = { user: key, hours: 0, count: 0, cats: {} };
+        userMap[key].hours += Number(a.hours)||0;
+        userMap[key].count++;
+        const c = a.activity || 'N/A';
+        userMap[key].cats[c] = (userMap[key].cats[c]||0) + 1;
+      }
+      const userRows = Object.values(userMap).map(u => {
+        const topUserCat = Object.entries(u.cats).sort((x,y) => y[1]-x[1])[0];
+        return { ...u, topCat: topUserCat ? topUserCat[0] : '—' };
+      }).sort((x,y) => y.hours - x.hours);
+
+      const pillBtn = (label, active, onclick) =>
+        `<button onclick="${onclick}" style="padding:5px 12px;border-radius:99px;font-size:11px;font-weight:600;letter-spacing:0.03em;border:1px solid transparent;cursor:pointer;font-family:inherit;transition:all 0.15s;${active ? 'background:rgba(59,107,247,0.22);color:var(--t1);border-color:rgba(59,107,247,0.32)' : 'background:transparent;color:var(--t3)'}">${label}</button>`;
+
+      return `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+          <p class="sec-label" style="color:var(--t3);margin:0">ACTIVIDADES EQUIPO</p>
+          <div style="display:flex;gap:6px">
+            <button onclick="exportActividadesCSV()" title="Exportar a CSV / Excel" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(16,185,129,0.18)'" onmouseout="this.style.background='rgba(16,185,129,0.08)'">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              CSV
+            </button>
+            <button onclick="exportActividadesPDF()" title="Exportar a PDF / Imprimir" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:#FCA5A5;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(239,68,68,0.18)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              PDF
+            </button>
+          </div>
+        </div>
+
+        <div class="sticky-bar">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <div style="display:flex;gap:3px;padding:3px;border-radius:99px;background:var(--row-b);border:1px solid var(--pill-br)">
+              ${ACT_PERIODS.map(p => pillBtn(p.label, activeActPeriod===p.id, `setActPeriod('${p.id}')`)).join('')}
+            </div>
+            <select onchange="setActUser(this.value)" style="padding:5px 10px;border-radius:8px;font-size:11px;border:1px solid var(--b1);background:var(--s1);color:var(--t2);font-family:inherit">
+              ${allUsers.map(u => `<option value="${esc(u)}" ${activeActUser===u?'selected':''}>${u==='Todos'?'Todos los técnicos':esc(u)}</option>`).join('')}
+            </select>
+            <select onchange="setActCategory(this.value)" style="padding:5px 10px;border-radius:8px;font-size:11px;border:1px solid var(--b1);background:var(--s1);color:var(--t2);font-family:inherit">
+              ${allCats.map(c => `<option value="${esc(c)}" ${activeActCategory===c?'selected':''}>${c==='Todos'?'Todas las categorías':esc(c)}</option>`).join('')}
+            </select>
+            <span style="font-size:11px;color:var(--t3)">${filtered.length} registros</span>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin-bottom:24px">
+          ${kpi('Horas totales',    fmtHours(totalHours), svgClock, 'var(--acc)')}
+          ${kpi('Registros',       filtered.length,      svgList,  'var(--acc2)')}
+          ${kpi('Técnicos activos',uniqueUsers,          svgUser,  'var(--acc3)')}
+          ${kpi('Categoría top',   topCat ? topCat.activity : '—', svgChart, 'var(--success)')}
+        </div>
+
+        ${filtered.length === 0 ? empty('actividades') : `
+        <div class="glass" style="border-radius:14px;padding:20px;margin-bottom:24px">
+          <p class="sec-label" style="color:var(--t3);margin-bottom:16px">HORAS POR CATEGORÍA</p>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            ${catRows.map(r => {
+              const color = colorMap[r.activity] || ACT_OTHER_COLOR;
+              const pct = totalHours > 0 ? Math.round((r.hours/totalHours)*100) : 0;
+              return `
+              <div style="display:flex;align-items:center;gap:12px">
+                <div style="width:150px;flex-shrink:0;font-size:12px;color:var(--t2);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.activity)}">${esc(r.activity)}</div>
+                <div style="flex:1;height:16px;background:var(--card-b);border-radius:8px;overflow:hidden;position:relative">
+                  <div style="height:100%;width:${pct}%;background:${color};border-radius:8px;transition:width 0.5s ease"></div>
+                </div>
+                <div style="width:110px;flex-shrink:0;text-align:right;font-size:11px;color:var(--t3);font-family:var(--font-mono)">${fmtHours(r.hours)} · ${pct}%</div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+
+        <div class="glass" style="border-radius:14px;overflow:hidden;margin-bottom:24px">
+          <p class="sec-label" style="color:var(--t3);margin:16px 0 0 20px">POR TÉCNICO</p>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:12px">
+            <thead><tr style="border-bottom:1px solid var(--b1)">
+              ${['TÉCNICO','HORAS','REGISTROS','CATEGORÍA MÁS FRECUENTE'].map(h =>
+                `<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:600;letter-spacing:0.07em;color:var(--t3)">${h}</th>`).join('')}
+            </tr></thead>
+            <tbody>
+              ${userRows.map((u,idx) => `
+                <tr style="border-bottom:1px solid var(--row-b);background:${idx%2===0?'transparent':'var(--row-b)'}">
+                  <td style="padding:11px 16px;color:var(--t1);font-weight:600">${esc(u.user)}</td>
+                  <td style="padding:11px 16px;color:var(--t2);font-family:var(--font-mono)">${fmtHours(u.hours)}</td>
+                  <td style="padding:11px 16px;color:var(--t2)">${u.count}</td>
+                  <td style="padding:11px 16px">${categoryBadge(u.topCat, colorMap[u.topCat]||ACT_OTHER_COLOR)}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="glass" style="border-radius:14px;overflow:hidden">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="border-bottom:1px solid var(--b1)">
+              ${['FECHA','TÉCNICO','CATEGORÍA','HORAS','NOTAS'].map(h =>
+                `<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:600;letter-spacing:0.07em;color:var(--t3)">${h}</th>`).join('')}
+            </tr></thead>
+            <tbody>
+              ${[...filtered].sort((x,y) => new Date(y.log_date)-new Date(x.log_date)).slice(0,300).map((a,idx) => `
+                <tr style="border-bottom:1px solid var(--row-b);background:${idx%2===0?'transparent':'var(--row-b)'}">
+                  <td style="padding:11px 16px;color:var(--t2);white-space:nowrap">${a.log_date ? new Date(a.log_date+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—'}</td>
+                  <td style="padding:11px 16px;color:var(--t1);font-weight:600">${esc(a.user_name||'—')}</td>
+                  <td style="padding:11px 16px">${categoryBadge(a.activity||'N/A', colorMap[a.activity||'N/A']||ACT_OTHER_COLOR)}</td>
+                  <td style="padding:11px 16px;color:var(--t2);font-family:var(--font-mono)">${fmtHours(a.hours)}</td>
+                  <td style="padding:11px 16px;color:var(--t3);max-width:260px"><span style="display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden">${esc(a.notes)||'—'}</span></td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+          ${filtered.length > 300 ? `<div style="padding:12px 16px;text-align:center;color:var(--t3);font-size:11px">Mostrando los 300 registros más recientes de ${filtered.length}</div>` : ''}
+        </div>
+        `}
+      `;
+    }
+
+    window.setActPeriod   = function(p) { activeActPeriod = p; render(); };
+    window.setActUser     = function(v) { activeActUser = v; render(); };
+    window.setActCategory = function(v) { activeActCategory = v; render(); };
+
+    window.exportActividadesCSV = function() {
+      const data = window._actividadesExportData || [];
+      const headers = ['Fecha','Técnico','Categoría','Horas','Notas'];
+      const rows = data.map(act => [
+        act.log_date || '',
+        act.user_name || '',
+        act.activity || '',
+        fmtHours(act.hours),
+        act.notes || ''
+      ]);
+      const csv = [headers, ...rows]
+        .map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))
+        .join('\n');
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `actividades_equipo_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    window.exportActividadesPDF = function() {
+      const data = window._actividadesExportData || [];
+      const escP = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const rows = [...data].sort((x,y) => new Date(y.log_date)-new Date(x.log_date)).map(a => `<tr>
+        <td>${escP(a.log_date)}</td>
+        <td>${escP(a.user_name)}</td>
+        <td>${escP(a.activity)}</td>
+        <td style="text-align:center">${escP(fmtHours(a.hours))}</td>
+        <td>${escP(a.notes)}</td>
+      </tr>`).join('');
+      const win = window.open('', '_blank');
+      win.document.write(`<!DOCTYPE html><html lang="es"><head>
+        <meta charset="UTF-8">
+        <title>Actividades Equipo Grupo SPEC — ${new Date().toLocaleDateString('es-AR')}</title>
+        <style>
+          body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111;margin:20px}
+          h2{font-size:15px;margin-bottom:3px}
+          p.meta{font-size:10px;color:#666;margin-bottom:14px}
+          table{width:100%;border-collapse:collapse;table-layout:fixed}
+          th{background:#1e2235;color:#fff;padding:6px 8px;text-align:left;font-size:10px;letter-spacing:0.05em;font-weight:700}
+          td{padding:5px 7px;border-bottom:1px solid #e5e7eb;vertical-align:top;word-break:break-word}
+          tr:nth-child(even) td{background:#f9fafb}
+          @page{margin:15mm}
+          @media print{body{margin:0}}
+        </style>
+      </head><body>
+        <h2>Actividades Equipo — Grupo SPEC</h2>
+        <p class="meta">Exportado: ${new Date().toLocaleString('es-AR')} &nbsp;·&nbsp; ${data.length} registro${data.length!==1?'s':''}</p>
+        <table>
+          <colgroup>
+            <col style="width:14%"><col style="width:20%"><col style="width:22%">
+            <col style="width:12%"><col style="width:32%">
+          </colgroup>
+          <thead><tr><th>Fecha</th><th>Técnico</th><th>Categoría</th><th>Horas</th><th>Notas</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <script>window.onload=()=>window.print();<\/script>
+      </body></html>`);
+      win.document.close();
+    };
 
     // ── BOOTSTRAP ──────────────────────────────────────────────────────
     if (localStorage.getItem('spec-theme') === 'light') {
