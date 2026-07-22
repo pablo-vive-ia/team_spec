@@ -367,6 +367,8 @@
     let activeActUser     = 'Todos';
     let activeActCategory = 'Todos';
     let activeActPeriod   = 'mes';
+    let actSortField      = 'log_date';
+    let actSortDir        = 'desc';
     let D = { projects:[], installations:[], tickets:[], orders:[], log:[], tasks:[], activities:[] };
     let sortState = {
       proyectos:     { col: 'progress_pct', dir: -1 },
@@ -444,6 +446,8 @@
       activeActUser       = 'Todos';
       activeActCategory   = 'Todos';
       activeActPeriod     = 'mes';
+      actSortField        = 'log_date';
+      actSortDir          = 'desc';
       updateNavTabs();
       render(true);
     }
@@ -2331,10 +2335,52 @@
       </span>`;
     }
 
+    // Agrupa las ~15 categorías finas de Zoho en 6 familias legibles para el
+    // gráfico de torta. Prefijo/substring sobre el nombre de la Tarea Zoho —
+    // no hay lista canónica, así que todo lo que no matchea cae en "Otros".
+    function activityGroup(cat) {
+      const c = (cat||'').toUpperCase();
+      if (c.startsWith('COMERCIAL'))  return 'Comercial';
+      if (c.startsWith('PEDIDO'))     return 'Pedidos';
+      if (c.includes('SOPORTE'))      return 'Soporte';
+      if (c === 'PROYECTOS')          return 'Proyectos';
+      if (c.startsWith('REUNIONES'))  return 'Reuniones';
+      return 'Otros';
+    }
+
+    // Mismo criterio que buildActivityColorMap: orden fijo por horas del
+    // dataset COMPLETO (no filtrado), así el color/posición de un grupo en
+    // la torta nunca cambia al aplicar filtros.
+    function buildGroupColorMap(allActivities) {
+      const totals = {};
+      for (const a of allActivities) {
+        const g = activityGroup(a.activity);
+        totals[g] = (totals[g]||0) + (Number(a.hours)||0);
+      }
+      const ranked = Object.keys(totals).sort((x,y) => totals[y]-totals[x]);
+      const map = {};
+      ranked.forEach((g, idx) => { map[g] = idx < ACT_COLORS.length ? ACT_COLORS[idx] : ACT_OTHER_COLOR; });
+      return map;
+    }
+
+    function sortActivities(rows, field, dir) {
+      const mul = dir === 'asc' ? 1 : -1;
+      return [...rows].sort((a,b) => {
+        let av, bv;
+        if (field === 'hours') { av = Number(a.hours)||0; bv = Number(b.hours)||0; }
+        else if (field === 'user_name' || field === 'activity') { av = (a[field]||'').toLowerCase(); bv = (b[field]||'').toLowerCase(); }
+        else { av = a.log_date||''; bv = b.log_date||''; }
+        if (av < bv) return -1*mul;
+        if (av > bv) return  1*mul;
+        return 0;
+      });
+    }
+
     function renderActividadesEquipo() {
       if (!D.activities.length) return `${sh('ACTIVIDADES EQUIPO')}${empty('actividades')}`;
 
-      const colorMap = buildActivityColorMap(D.activities);
+      const colorMap      = buildActivityColorMap(D.activities);
+      const groupColorMap = buildGroupColorMap(D.activities);
 
       const ps = actPeriodStart(activeActPeriod), pe = actPeriodEnd(activeActPeriod);
       let byPeriod = D.activities;
@@ -2377,8 +2423,43 @@
         return { ...u, topCat: topUserCat ? topUserCat[0] : '—' };
       }).sort((x,y) => y.hours - x.hours);
 
+      // Agrupado (Soporte/Pedidos/Comercial/Proyectos/Reuniones/Otros) para la torta.
+      // Orden fijo = groupColorMap (rankeado sobre el dataset completo), no sobre `filtered` —
+      // así un grupo nunca cambia de posición/color al aplicar filtros, solo se oculta si queda en 0.
+      const groupTotals = {};
+      for (const a of filtered) {
+        const g = activityGroup(a.activity);
+        if (!groupTotals[g]) groupTotals[g] = { group: g, hours: 0, count: 0 };
+        groupTotals[g].hours += Number(a.hours)||0;
+        groupTotals[g].count++;
+      }
+      const groupRows = Object.keys(groupColorMap)
+        .map(g => groupTotals[g] || { group: g, hours: 0, count: 0 })
+        .filter(r => r.hours > 0);
+
+      const DONUT_R = 64, DONUT_STROKE = 24, DONUT_C = 90, DONUT_CIRC = 2*Math.PI*DONUT_R;
+      const DONUT_GAP = groupRows.length > 1 ? 3 : 0;
+      let donutAcc = 0;
+      const donutArcs = groupRows.map(r => {
+        const frac = totalHours > 0 ? r.hours/totalHours : 0;
+        const len  = frac*DONUT_CIRC;
+        const seg = {
+          group: r.group, hours: r.hours, count: r.count,
+          pct: totalHours > 0 ? Math.round(frac*100) : 0,
+          color: groupColorMap[r.group] || ACT_OTHER_COLOR,
+          dasharray: `${Math.max(len-DONUT_GAP,0)} ${Math.max(DONUT_CIRC-len+DONUT_GAP,0)}`,
+          dashoffset: -donutAcc,
+        };
+        donutAcc += len;
+        return seg;
+      });
+
       const pillBtn = (label, active, onclick) =>
         `<button onclick="${onclick}" style="padding:5px 12px;border-radius:99px;font-size:11px;font-weight:600;letter-spacing:0.03em;border:1px solid transparent;cursor:pointer;font-family:inherit;transition:all 0.15s;${active ? 'background:rgba(59,107,247,0.22);color:var(--t1);border-color:rgba(59,107,247,0.32)' : 'background:transparent;color:var(--t3)'}">${label}</button>`;
+
+      const sortArrow = f => actSortField===f ? (actSortDir==='asc'?' ▲':' ▼') : '';
+      const sortTh = (label, field) =>
+        `<th onclick="setActSort('${field}')" style="padding:10px 16px;text-align:left;font-size:10px;font-weight:600;letter-spacing:0.07em;color:${actSortField===field?'var(--t1)':'var(--t3)'};cursor:pointer;user-select:none;white-space:nowrap">${label}${sortArrow(field)}</th>`;
 
       return `
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
@@ -2420,19 +2501,35 @@
         ${filtered.length === 0 ? empty('actividades') : `
         <div class="glass" style="border-radius:14px;padding:20px;margin-bottom:24px">
           <p class="sec-label" style="color:var(--t3);margin-bottom:16px">HORAS POR CATEGORÍA</p>
-          <div style="display:flex;flex-direction:column;gap:10px">
-            ${catRows.map(r => {
-              const color = colorMap[r.activity] || ACT_OTHER_COLOR;
-              const pct = totalHours > 0 ? Math.round((r.hours/totalHours)*100) : 0;
-              return `
-              <div style="display:flex;align-items:center;gap:12px">
-                <div style="width:150px;flex-shrink:0;font-size:12px;color:var(--t2);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.activity)}">${esc(r.activity)}</div>
-                <div style="flex:1;height:16px;background:var(--card-b);border-radius:8px;overflow:hidden;position:relative">
-                  <div style="height:100%;width:${pct}%;background:${color};border-radius:8px;transition:width 0.5s ease"></div>
-                </div>
-                <div style="width:110px;flex-shrink:0;text-align:right;font-size:11px;color:var(--t3);font-family:var(--font-mono)">${fmtHours(r.hours)} · ${pct}%</div>
-              </div>`;
-            }).join('')}
+          <div style="display:flex;align-items:center;gap:32px;flex-wrap:wrap">
+            <div style="position:relative;width:180px;height:180px;flex-shrink:0">
+              <svg viewBox="0 0 180 180" width="180" height="180">
+                <g transform="rotate(-90 ${DONUT_C} ${DONUT_C})">
+                  <circle cx="${DONUT_C}" cy="${DONUT_C}" r="${DONUT_R}" fill="none" stroke="var(--row-b)" stroke-width="${DONUT_STROKE}"/>
+                  ${donutArcs.map((seg, idx) => `
+                  <circle id="act-arc-${idx}" class="act-arc" cx="${DONUT_C}" cy="${DONUT_C}" r="${DONUT_R}" fill="none"
+                    stroke="${seg.color}" stroke-width="${DONUT_STROKE}" stroke-linecap="butt"
+                    stroke-dasharray="${seg.dasharray}" stroke-dashoffset="${seg.dashoffset}"
+                    style="transition:stroke-width 0.15s ease, opacity 0.15s ease;cursor:pointer"
+                    onmouseenter="this.parentElement.querySelectorAll('.act-arc').forEach(c=>{c.style.opacity=(c===this)?'1':'0.3'});this.style.strokeWidth='${DONUT_STROKE+8}';document.getElementById('act-donut-name').textContent='${seg.group}';document.getElementById('act-donut-val').textContent='${fmtHours(seg.hours)}';document.getElementById('act-donut-pct').textContent='${seg.pct}% · ${seg.count} registros';"
+                    onmouseleave="this.parentElement.querySelectorAll('.act-arc').forEach(c=>{c.style.opacity='1';c.style.strokeWidth='${DONUT_STROKE}'});document.getElementById('act-donut-name').textContent='Total';document.getElementById('act-donut-val').textContent='${fmtHours(totalHours)}';document.getElementById('act-donut-pct').textContent='';"
+                  ></circle>`).join('')}
+                </g>
+              </svg>
+              <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;text-align:center;padding:0 20px">
+                <span id="act-donut-val" style="font-size:19px;font-weight:700;color:var(--t1);font-family:var(--font-mono)">${fmtHours(totalHours)}</span>
+                <span id="act-donut-name" style="font-size:11px;color:var(--t3);font-weight:600;letter-spacing:0.03em;margin-top:2px">Total</span>
+                <span id="act-donut-pct" style="font-size:10px;color:var(--t3);margin-top:1px">&nbsp;</span>
+              </div>
+            </div>
+            <div style="flex:1;min-width:220px;max-width:340px;display:flex;flex-direction:column;gap:4px">
+              ${donutArcs.map((seg, idx) => `
+                <div onmouseenter="document.getElementById('act-arc-${idx}').dispatchEvent(new Event('mouseenter'));this.style.background='var(--row-b)'" onmouseleave="document.getElementById('act-arc-${idx}').dispatchEvent(new Event('mouseleave'));this.style.background='transparent'" style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:8px;cursor:pointer;transition:background 0.15s">
+                  <span style="width:10px;height:10px;border-radius:50%;background:${seg.color};flex-shrink:0"></span>
+                  <span style="flex:1;font-size:12px;font-weight:600;color:var(--t2)">${esc(seg.group)}</span>
+                  <span style="font-size:11px;color:var(--t3);font-family:var(--font-mono)">${fmtHours(seg.hours)} · ${seg.pct}%</span>
+                </div>`).join('')}
+            </div>
           </div>
         </div>
 
@@ -2458,17 +2555,15 @@
         <div class="glass" style="border-radius:14px;overflow:hidden">
           <table style="width:100%;border-collapse:collapse;font-size:12px">
             <thead><tr style="border-bottom:1px solid var(--b1)">
-              ${['FECHA','TÉCNICO','CATEGORÍA','HORAS','NOTAS'].map(h =>
-                `<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:600;letter-spacing:0.07em;color:var(--t3)">${h}</th>`).join('')}
+              ${sortTh('FECHA','log_date')}${sortTh('TÉCNICO','user_name')}${sortTh('CATEGORÍA','activity')}${sortTh('HORAS','hours')}
             </tr></thead>
             <tbody>
-              ${[...filtered].sort((x,y) => new Date(y.log_date)-new Date(x.log_date)).slice(0,300).map((a,idx) => `
+              ${sortActivities(filtered, actSortField, actSortDir).slice(0,300).map((a,idx) => `
                 <tr style="border-bottom:1px solid var(--row-b);background:${idx%2===0?'transparent':'var(--row-b)'}">
                   <td style="padding:11px 16px;color:var(--t2);white-space:nowrap">${a.log_date ? new Date(a.log_date+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—'}</td>
                   <td style="padding:11px 16px;color:var(--t1);font-weight:600">${esc(a.user_name||'—')}</td>
                   <td style="padding:11px 16px">${categoryBadge(a.activity||'N/A', colorMap[a.activity||'N/A']||ACT_OTHER_COLOR)}</td>
                   <td style="padding:11px 16px;color:var(--t2);font-family:var(--font-mono)">${fmtHours(a.hours)}</td>
-                  <td style="padding:11px 16px;color:var(--t3);max-width:260px"><span style="display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden">${esc(a.notes)||'—'}</span></td>
                 </tr>`).join('')}
             </tbody>
           </table>
@@ -2481,6 +2576,11 @@
     window.setActPeriod   = function(p) { activeActPeriod = p; render(); };
     window.setActUser     = function(v) { activeActUser = v; render(); };
     window.setActCategory = function(v) { activeActCategory = v; render(); };
+    window.setActSort     = function(field) {
+      if (actSortField === field) { actSortDir = actSortDir === 'asc' ? 'desc' : 'asc'; }
+      else { actSortField = field; actSortDir = (field === 'hours' || field === 'log_date') ? 'desc' : 'asc'; }
+      render();
+    };
 
     window.exportActividadesCSV = function() {
       const data = window._actividadesExportData || [];
