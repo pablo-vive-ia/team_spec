@@ -71,6 +71,9 @@ All JS-generated HTML uses these variables in inline styles — never hardcode `
 
 **Tickets:** includes `zammad_id` and `zammad_number` columns. Stale ticket alert (red highlight + icon) when `last_contact_at` > 5 days ago.
 
+- **Scope toggle** (`activeTicketScope`, default `'abiertos'`, reset en `switchSection`): pills "Abierto · Nuevo" / "Cerrados" / "Todos" sobre la tabla principal — reemplazan el badge estático que había antes. `ticketMatchesScope(t, scope)` es el único punto que decide inclusión por estado; `isTicketAbierto(t)` (basado en `STATUS_ABIERTOS`) es la fuente de verdad de qué es "abierto" en toda la sección (KPIs, reconciliación, filtro).
+- **Sin tickets de Pedidos**: el query de carga (`loadAll`) filtra `tickets` con `.not('group_name','ilike','%pedido%')` — excluye `Interno::Pedido` y cualquier variante futura con "pedido" en el producto Zammad. Los ~199 registros históricos (`Interno::Pedido`) y sus 35 `status_log` asociados se borraron de Supabase el 2026-08-04 (decisión explícita del usuario, no solo ocultamiento).
+
 **Zammad iframe:** the dark KPI band at the top of Tickets section is an external iframe from n8n — its styling cannot be controlled from `index.html`.
 
 **Select dropdowns:** all `<select>` and `<option>` have global CSS rules for dark/light contrast — never style options inline without matching both modes.
@@ -116,7 +119,7 @@ All JS-generated HTML uses these variables in inline styles — never hardcode `
 
 | Workflow | ID | Trigger | Target tables |
 |---|---|---|---|
-| `zammad-sync-supabase` | `votsdMSzgAHnTSA0` | Cron 15 min | `tickets`, `status_log` |
+| `zammad-sync-supabase` | `votsdMSzgAHnTSA0` | Cron 4h (nodo se llama "Cron 4hs"; CLAUDE.md decía 15 min, desactualizado) | `tickets`, `status_log` |
 | `zoho-projects-sync-supabase` | `bbnieKNegHRGrfvF` | Cron 4h (nodo se llama "Cron 4hs"; CLAUDE.md decía 12h, desactualizado) | `projects`, `orders`, `status_log`, `team_activities` |
 | `telegram-status-update` | `SjD5aAOWywPS92eM` | Telegram voice/text | `installations` + `status_log` |
 
@@ -136,7 +139,7 @@ URLs:
 - n8n MCP — ✅ configurado en `.mcp.json` via HTTP transport (`https://n8n.vive-ia.com/mcp-server/http`).
 - `zoho-projects-sync-supabase` — ✅ funcionando. Proyectos (20 items) y pedidos (14 milestones activos) sincronizando. Cron 12h activo. Comparación case-insensitive. Paginación milestones cubre índices 1–601. 16/20 proyectos con `next_step`.
 - `telegram-status-update` — ✅ activo y testeado. Crea Y actualiza instalaciones. Credencial: `Team_Spec` (Telegram API).
-- `zammad-sync-supabase` — ⚠️ lógica completa y bugs corregidos (ver sección abajo), pero credencial Zammad no creada → workflow no activado.
+- `zammad-sync-supabase` — ✅ activo y sincronizando (contradice la nota vieja de "credencial no creada" — la credencial `Zammad API` ya existía y el workflow lleva corriendo un buen tiempo; 3270+ tickets en Supabase desde 2018 hasta hoy). Ampliado el 2026-08-04: además de abiertos/nuevos/pendientes, trae tickets cerrados en los últimos 7 días con su estado real de Zammad (ver "Zammad Sync — Estado Detallado"), y excluye tickets `Interno::Pedido` (y similares) de raíz.
 - Netlify deploy — ⏳ pendiente (drag & drop de la carpeta, sin `netlify.toml`).
 
 ## Zoho Sync — Estado Detallado
@@ -199,22 +202,26 @@ Rama nueva (agregada 2026-07-22) dentro del mismo workflow `zoho-projects-sync-s
 
 ## Zammad Sync — Estado Detallado
 
-Workflow `zammad-sync-supabase` (`votsdMSzgAHnTSA0`). Lógica completa, pendiente de credencial.
+Workflow `zammad-sync-supabase` (`votsdMSzgAHnTSA0`). ✅ Activo, corriendo cada 4h (nodo "Cron 4hs"). La nota histórica de "pendiente de credencial" era incorrecta/desactualizada — la credencial `Zammad API` ya está creada y el workflow lleva tiempo sincronizando (3270+ tickets en Supabase desde 2018, probablemente de un backfill histórico anterior a esta documentación).
 
 ### Conexión Zammad
 - **Host:** `190.210.223.60` (IP directa, SSL con SNI `soporte.grupospec.com.ar`)
 - **Token:** en n8n Credentials Store como `Zammad API` (Header Auth: `Authorization: Token token=...`)
 - **rejectUnauthorized:** `false` (certificado self-signed o mismatch de hostname)
 
-### Buscar Tickets Zammad — lógica actual
-El nodo `Buscar Tickets Zammad` es un Code node con HTTPS nativo (no HTTP Request node):
+### Buscar Tickets Zammad — lógica actual (ampliada 2026-08-04)
+El nodo `Buscar Tickets Zammad` es un Code node con HTTPS nativo (no HTTP Request node). Hace **dos** fetches y los combina (dedupe por `id` via `Map`):
 
-1. `GET /api/v1/ticket_states` → obtiene todos los estados con `state_type_id`
-2. Filtra estados con `state_type_id` en `{1, 2, 3, 4}` (1=new, 2=open, 3=pending reminder, 4=pending action)
-3. Construye query ES: `state_id:X OR state_id:Y OR ...`
-4. Paginación: hasta 10 páginas de 100 tickets (`/api/v1/tickets/search?query=...&expand=true&per_page=100&page=N`)
-5. Fallback si `/api/v1/ticket_states` falla: usa IDs `[1, 2, 3, 4]` directamente
-6. Maneja ambos formatos de respuesta: array directo Y `{assets: {Ticket: {...}}}`
+1. **Abiertos/nuevos/pendientes** (igual que antes):
+   - `GET /api/v1/ticket_states` → obtiene todos los estados con `state_type_id`
+   - Filtra estados con `state_type_id` en `{1, 2, 3, 4}` (1=new, 2=open, 3=pending reminder, 4=pending action)
+   - Query ES: `state_id:X OR state_id:Y OR ...`
+   - Fallback si `/api/v1/ticket_states` falla: usa IDs `[1, 2, 3, 4]` directamente
+2. **Cerrados recientes** (nuevo): estados con `state_type_id === 5` (closed), query `(state_id:X OR ...) AND close_at:>=<hoy-7d>`. Objetivo: que el ticket llegue a Supabase con su **estado real de Zammad** (ej. "Cerrado con exito", "Cerrado sin continuidad") en vez de depender solo del fallback genérico `'cerrado'` de "Comparar y Preparar". `CLOSED_WINDOW_DAYS = 7` da margen sobre el cron de 4h por si una corrida falla.
+   - **El filtro `close_at:>=` de Zammad/ES no es 100% preciso** — probado en vivo (`test_workflow` + `get_execution`, ejecuciones 12381–12385): sobre ~24 tickets cerrados en la ventana, colaron 2 tickets cerrados en 2024 y reabiertos/vueltos a cerrar meses atrás. Por eso el código **re-filtra en JS** después del fetch (`t.close_at || t.last_close_at || t.updated_at` contra el cutoff) en vez de confiar ciegamente en el query engine.
+   - Nota aparte: por la misma imprecisión del motor de búsqueda, la query de **abiertos** a veces también devuelve algún ticket ya cerrado — no es un problema real porque el código siempre usa el `state` que trae la respuesta de la API, nunca asume el estado a partir de qué query lo devolvió.
+- Paginación: hasta 10 páginas de 100 tickets por cada fetch (`/api/v1/tickets/search?query=...&expand=true&per_page=100&page=N`)
+- Maneja ambos formatos de respuesta: array directo Y `{assets: {Ticket: {...}}}`
 
 **Motivo del Code node:** el nodo HTTP Request de n8n no permite `rejectUnauthorized: false` ni SNI custom — necesario porque Zammad está en IP directa con certificado para otro dominio.
 
@@ -228,11 +235,11 @@ El nodo `Buscar Tickets Zammad` es un Code node con HTTPS nativo (no HTTP Reques
   - resto (x-Time, xTime, netSync, Postmaster) → `netTime`
 - Se preservan dos campos: `team` (enum, para Supabase) y `group_name` (valor original de Zammad, para display en frontend)
 - `stateName`, `groupName`, `priorityName` se extraen con fallback string si Zammad devuelve objeto en lugar de string
+- **Excluye tickets de Pedidos (2026-08-04)**: `if (/pedido/i.test(teamRaw)) continue;` antes de mapear — descarta `Interno::Pedido` y cualquier producto Zammad que contenga "pedido" (case-insensitive), tanto abiertos como cerrados. Motivo: no son tickets de soporte, son notificaciones operativas de pedidos que ensuciaban las métricas. Se aplica en el punto de entrada (antes de comparar/crear/actualizar), así nunca llegan a Supabase — no depende de un filtro downstream.
 
 **Comparar y Preparar (reconciliación de tickets cerrados):**
-- Zammad solo devuelve tickets abiertos/nuevos/pendientes
-- Al finalizar el fetch, compara tickets abiertos en Supabase contra los IDs fetcheados
-- Si un ticket estaba abierto en Supabase pero no aparece en Zammad → se marca `status: 'cerrado'`
+- Fallback de seguridad para cierres que la ventana de 7 días de "Buscar Tickets Zammad" no capturó: compara tickets abiertos en Supabase contra los IDs fetcheados en esta corrida
+- Si un ticket estaba abierto en Supabase pero no aparece en el fetch → se marca `status: 'cerrado'` (genérico, sin el estado real de Zammad — para eso está el fetch de cerrados recientes de arriba)
 
 **Insertar Status Log:**
 - Credencial: `CEO_vive_Supabase` (ID: `5wD9YEVcOOK8Xchb`)
@@ -244,13 +251,10 @@ El nodo `Buscar Tickets Zammad` es un Code node con HTTPS nativo (no HTTP Reques
 - `team` → enum válido para Supabase (`netTime` / `SPECManager` / `SPEC Argentina`)
 - `group_name` → nombre original del producto Zammad (`x-Time`, `SPECManager`, `netSync`, etc.)
 - El frontend siempre lee `group_name` para tabs y badges: `ticketProductLabel(t.group_name || t.team)`
+- **Dato de calidad conocido, no resuelto:** 5 tickets (`group_name`/`team` = `Interno`) tienen el valor literal `'["Interno"]'` (string con corchetes y comillas) en vez de `'Interno'` — bug histórico de una corrida donde el array JSON de `product` no se desempaquetó antes de guardar. No afecta la lógica actual (`Array.isArray` ya lo maneja bien desde hace tiempo), son solo residuos viejos.
 
-### Pendiente para activar
-Crear credencial `Zammad API` en n8n (Header Auth):
-- Header: `Authorization`
-- Value: `Token token=TU_TOKEN_ZAMMAD`
-
-Luego re-guardar credencial `CEO_vive_Supabase` (abrir → guardar sin cambios) para refrescar schema cache del nodo Supabase, y activar workflow `votsdMSzgAHnTSA0`.
+### Versión activa vs. draft en n8n — gotcha importante
+`update_workflow` (MCP) guarda el **draft** (`versionId`), pero el cron corre sobre la **versión activa** (`activeVersionId`) — son campos distintos en `get_workflow_details` y pueden divergir. Al editar este workflow (o cualquiera activo) vía MCP: after `update_workflow`, hay que llamar `publish_workflow` explícitamente para que los cambios lleguen a producción — si no, el draft queda testeable con `test_workflow`/`execute_workflow` pero el cron sigue corriendo el código viejo indefinidamente, sin ningún error visible. Nos pasó el 2026-08-04 al ampliar este mismo workflow.
 
 ## Telegram Workflow — Detalles
 
@@ -288,16 +292,15 @@ Al crear una instalación nueva, el LLM devuelve `entity_id: null` (el registro 
 | `Zoho_project` | `NOU6b5QLMtHeOXgm` | OAuth2 genérico | `zoho-projects-sync-supabase` — ✅ scope `ZohoProjects.timesheets.READ` agregado 2026-07-22 (re-autorizado manualmente) |
 | `Team_Spec` | — | Telegram API | `telegram-status-update` |
 | `CEO_vive_Supabase` | `5wD9YEVcOOK8Xchb` | supabaseApi | `zammad-sync-supabase` |
-| `Zammad API` | — | Header Auth (`Authorization: Token token=...`) | `zammad-sync-supabase` ⏳ pendiente |
+| `Zammad API` | — | Header Auth (`Authorization: Token token=...`) | `zammad-sync-supabase` — ✅ activa (la nota vieja de "pendiente" estaba desactualizada) |
 
 ## Pendientes para activar todo
 
 1. **Aplicar schema.sql** en Supabase SQL Editor — ✅ ya aplicado (incluye `team_activities`)
-2. **Zammad credential** — crear `Zammad API` (Header Auth, `Authorization: Token token=TU_TOKEN`) y activar workflow `votsdMSzgAHnTSA0`
-3. **Re-guardar `CEO_vive_Supabase`** en n8n para refrescar schema cache (abrir credencial → guardar sin cambios)
-4. **Netlify deploy** — drag & drop de la carpeta (sin `netlify.toml`)
-5. ~~Re-autorizar `Zoho_project`~~ — ✅ hecho 2026-07-22, rama de Actividades Equipo sincronizando datos reales (755 registros del año en curso)
-6. **Opcional:** ampliar el backfill de Actividades Equipo a todo el histórico de Zoho (hoy solo trae el año en curso, ver "Actividades Equipo — Time Logs de Zoho" arriba) — requiere correr el workflow manualmente con la ventana temporal ampliada, dado que el sync incremental normal ya no volvería a hacer backfill una vez que la tabla tiene datos
+2. ~~Zammad credential~~ — ✅ ya estaba activa, la nota vieja era desactualizada. Workflow `votsdMSzgAHnTSA0` corriendo y ampliado el 2026-08-04 (cerrados recientes + exclusión de Pedidos)
+3. **Netlify deploy** — drag & drop de la carpeta (sin `netlify.toml`)
+4. ~~Re-autorizar `Zoho_project`~~ — ✅ hecho 2026-07-22, rama de Actividades Equipo sincronizando datos reales (755 registros del año en curso)
+5. **Opcional:** ampliar el backfill de Actividades Equipo a todo el histórico de Zoho (hoy solo trae el año en curso, ver "Actividades Equipo — Time Logs de Zoho" arriba) — requiere correr el workflow manualmente con la ventana temporal ampliada, dado que el sync incremental normal ya no volvería a hacer backfill una vez que la tabla tiene datos
 
 ## n8n MCP
 

@@ -360,6 +360,7 @@
     let activeTicketPeriod  = 'mes';
     let activeTicketNivel   = 'Todos';
     let activeTicketStatus  = 'Todos';
+    let activeTicketScope   = 'abiertos'; // 'abiertos' | 'cerrados' | 'todos' — default abiertos+nuevos
     let filterTicketClient  = '';
     let filterPedidoClient  = '';
     let nivelTableSort  = {col:'count', dir:-1};
@@ -380,6 +381,21 @@
     const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     const STATUS_ABIERTOS = ['abierto', 'nuevo', 'open', 'new'];
+    function isTicketAbierto(t) {
+      const s = (t.status || '').toLowerCase();
+      return STATUS_ABIERTOS.some(x => s.includes(x));
+    }
+    function ticketMatchesScope(t, scope) {
+      if (scope === 'todos') return true;
+      const abierto = isTicketAbierto(t);
+      return scope === 'cerrados' ? !abierto : abierto;
+    }
+    const TICKET_SCOPES = [
+      {id:'abiertos', label:'Abierto · Nuevo'},
+      {id:'cerrados', label:'Cerrados'},
+      {id:'todos',    label:'Todos'},
+    ];
+    const TICKET_SCOPE_TITLES = { abiertos:'TICKETS ABIERTOS', cerrados:'TICKETS CERRADOS', todos:'TODOS LOS TICKETS' };
 
     // ── CARGA ──────────────────────────────────────────────────────────
     async function loadAll(animated = false) {
@@ -387,7 +403,7 @@
       const [p,i,t,o,l,tk,ac] = await Promise.all([
         sb.from('projects').select('*').order('updated_at',opts),
         sb.from('installations').select('*').order('updated_at',opts),
-        sb.from('tickets').select('*').order('updated_at',opts),
+        sb.from('tickets').select('*').not('group_name','ilike','%pedido%').order('updated_at',opts),
         sb.from('orders').select('*').order('updated_at',opts),
         sb.from('status_log').select('*').order('created_at',opts).limit(200),
         sb.from('tasks').select('*').order('created_at',opts),
@@ -443,6 +459,7 @@
       filterPedidoClient  = '';
       activeProjectGroup  = 'Todos';
       activeTicketProduct = 'Todos';
+      activeTicketScope   = 'abiertos';
       activeActUser       = 'Todos';
       activeActCategory   = 'Todos';
       activeActPeriod     = 'mes';
@@ -835,11 +852,11 @@
       window._estadoExportData = estadoRows;
       function sortIcon(srt,col){return srt.col===col?(srt.dir===1?'↑':'↓'):'↕';}
 
-      const _openTix=D.tickets.filter(t=>STATUS_ABIERTOS.some(s=>(t.status||'').toLowerCase().includes(s)));
+      const _scopeTix=D.tickets.filter(t=>ticketMatchesScope(t,activeTicketScope));
       const _tqClient=filterTicketClient.toLowerCase().trim();
       const statusFiltered=_tqClient
-        ? _openTix.filter(t=>(t.organization||t.client||'').toLowerCase().includes(_tqClient)||(t.title||'').toLowerCase().includes(_tqClient))
-        : _openTix;
+        ? _scopeTix.filter(t=>(t.organization||t.client||'').toLowerCase().includes(_tqClient)||(t.title||'').toLowerCase().includes(_tqClient))
+        : _scopeTix;
       const prodCounts={};
       statusFiltered.forEach(t=>{const p=ticketProductLabel(t.group_name||t.team);prodCounts[p]=(prodCounts[p]||0)+1;});
       const prodTabs=['Todos',...Object.keys(prodCounts).sort()];
@@ -1001,12 +1018,18 @@
             </div>
           </div>
 
-          <!-- ── TABLA DE TICKETS ABIERTOS ────────────────────── -->
+          <!-- ── TABLA DE TICKETS ────────────────────────────── -->
           <div class="glass" style="border-radius:14px;overflow-x:auto">
             <div style="padding:12px 16px;border-bottom:1px solid var(--card-b);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-              <span class="sec-label" style="color:var(--t2)">TICKETS ABIERTOS</span>
+              <span class="sec-label" style="color:var(--t2)">${TICKET_SCOPE_TITLES[activeTicketScope]}</span>
               <span style="font-size:11px;color:var(--t3)">${filtrados.length} registros</span>
-              <div style="display:flex;gap:3px;padding:3px;border-radius:99px;background:var(--row-b);border:1px solid var(--pill-br);margin-left:12px;flex-wrap:wrap">
+              <div style="display:flex;gap:3px;padding:3px;border-radius:99px;background:var(--row-b);border:1px solid var(--pill-br);flex-wrap:wrap">
+                ${TICKET_SCOPES.map(sc=>{
+                  const on=activeTicketScope===sc.id;
+                  return `<button onclick="setTicketScope('${sc.id}')" style="padding:4px 13px;border-radius:99px;font-size:11px;font-weight:600;letter-spacing:0.03em;border:1px solid ${on?'var(--b2)':'transparent'};cursor:pointer;font-family:inherit;transition:all 0.15s;background:${on?'rgba(59,107,247,0.22)':'transparent'};color:${on?'var(--t1)':'var(--t3)'}">${sc.label}</button>`;
+                }).join('')}
+              </div>
+              <div style="display:flex;gap:3px;padding:3px;border-radius:99px;background:var(--row-b);border:1px solid var(--pill-br);flex-wrap:wrap">
                 ${prodTabs.map(p=>{
                   const cnt=p==='Todos'?statusFiltered.length:(prodCounts[p]||0);
                   const on=activeTicketProduct===p;
@@ -1029,7 +1052,6 @@
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                   PDF
                 </button>
-                <span style="font-size:10px;color:var(--t3);background:var(--row-b);border:1px solid var(--pill-br);padding:3px 10px;border-radius:99px">Abierto · Nuevo</span>
               </div>
             </div>
             <table style="width:100%;font-size:13px;min-width:820px;border-collapse:collapse">
@@ -1679,6 +1701,11 @@
     };
     window.setTicketProduct = function(p) {
       activeTicketProduct = p;
+      render();
+    };
+    window.setTicketScope = function(s) {
+      activeTicketScope = s;
+      activeTicketProduct = 'Todos';
       render();
     };
     window.setTicketGroup = function(g) {
