@@ -44,7 +44,7 @@ Zoho API ────┘                                          │
 
 - Resumen: KPI cards + últimos movimientos instalaciones
 - Proyectos: kanban + progress bar
-- Instalaciones: table
+- Instalaciones: table, CRUD completo desde el frontend (crear, editar, eliminar — anon key con políticas RLS de escritura en `installations`; botón "Eliminar" en el modal de edición, solo visible en modo edit)
 - Tickets: table + iframe to `https://n8n.vive-ia.com/webhook/zammad-dashboard`
 - Pedidos: table
 - **Tareas Internas**: gestión de tareas internas del equipo (CRUD completo desde el frontend)
@@ -133,7 +133,7 @@ URLs:
 ## Current Status
 
 - `index.html` — ✅ completo. Sin servicios, sin Telegram en frontend. Anon key hardcoded. Branding Grupo SPEC (Plus Jakarta Sans, paleta corporativa, logo via `logo.png`). Light/dark toggle, fechas absolutas, columna zammad_id + zammad_number, stale ticket alerts, CSS variable theming completo. Resumen e Historial filtrados a instalaciones. Sección TAREAS INTERNAS con CRUD completo. Sección ACTIVIDADES EQUIPO (solo lectura) con KPIs, barras horizontales por categoría, filtros período/técnico/categoría, tabla por técnico y export CSV/PDF — ✅ sincronizando datos reales desde Zoho (755 registros del año en curso al 2026-07-22).
-- `schema.sql` — ✅ idempotente (IF NOT EXISTS + DO $$ EXCEPTION en enums/policies). Sin tabla services. Migraciones idempotentes: `nivel_soporte`, `time_unit`, `zammad_number` en tickets. Tabla `tasks` con RLS (anon puede leer y escribir). Tabla `team_activities` con RLS (anon solo lectura, escritura vía service_role/n8n) ✅ aplicada en Supabase.
+- `schema.sql` — ✅ idempotente (IF NOT EXISTS + DO $$ EXCEPTION en enums/policies). Sin tabla services. Migraciones idempotentes: `nivel_soporte`, `time_unit`, `zammad_number` en tickets. Tabla `tasks` con RLS (anon puede leer y escribir). Tabla `installations` con RLS (anon puede leer, crear, actualizar y — desde 2026-08-10 — eliminar; el archivo estaba desincronizado con la DB real, que ya tenía insert/update de una migración previa no documentada). Tabla `team_activities` con RLS (anon solo lectura, escritura vía service_role/n8n) ✅ aplicada en Supabase.
 - `logo.png` — ✅ en raíz del proyecto.
 - Supabase MCP — ✅ configurado en `.mcp.json` (`osnttxgmsfudghinxfat`).
 - n8n MCP — ✅ configurado en `.mcp.json` via HTTP transport (`https://n8n.vive-ia.com/mcp-server/http`).

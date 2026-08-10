@@ -144,13 +144,25 @@ ALTER TABLE status_log  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tasks       ENABLE ROW LEVEL SECURITY;
 
 -- POLICIES — lectura pública (anon key); escritura solo via service_role (n8n)
--- Excepción: tasks permite escritura desde el frontend (tool interno protegido por auth)
+-- Excepciones: tasks e installations permiten escritura desde el frontend (CRUD manual)
 DO $$ BEGIN
   CREATE POLICY "lectura publica" ON projects FOR SELECT USING (true);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
   CREATE POLICY "lectura publica" ON installations FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "anon insert installations" ON installations FOR INSERT TO anon WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "anon update installations" ON installations FOR UPDATE TO anon USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "anon delete installations" ON installations FOR DELETE TO anon USING (true);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN

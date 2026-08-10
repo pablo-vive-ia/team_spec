@@ -1604,6 +1604,8 @@
             <div id="inst-modal-err" style="display:none;font-size:11px;color:#FCA5A5;padding:8px 12px;background:rgba(239,68,68,0.08);border-radius:7px;border:1px solid rgba(239,68,68,0.2)"></div>
           </div>
           <div style="padding:0 24px 20px;display:flex;gap:10px;justify-content:flex-end">
+            <button id="inst-delete-btn" onclick="deleteInst()" style="display:none;padding:8px 14px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid var(--b1);background:transparent;color:var(--t3);cursor:pointer;font-family:inherit;transition:all 0.15s;margin-right:auto"
+              onmouseover="this.style.borderColor='var(--danger)';this.style.color='var(--danger)'" onmouseout="this.style.borderColor='var(--b1)';this.style.color='var(--t3)'">Eliminar</button>
             <button onclick="closeInstModal()" style="padding:8px 18px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid var(--b1);background:var(--row-b);color:var(--t2);cursor:pointer;font-family:inherit;transition:all 0.15s">Cancelar</button>
             <button id="inst-save-btn" onclick="saveInst()" style="padding:8px 20px;font-size:12px;font-weight:700;border-radius:8px;border:1px solid rgba(59,107,247,0.4);background:rgba(59,107,247,0.18);color:#93C5FD;cursor:pointer;font-family:inherit;transition:all 0.15s">Guardar</button>
           </div>
@@ -1625,6 +1627,7 @@
       document.getElementById('inst-f-status').value        = inst.status        || 'pendiente';
       document.getElementById('inst-f-team').value          = inst.team          || 'netTime';
       document.getElementById('inst-modal-err').style.display = 'none';
+      document.getElementById('inst-delete-btn').style.display = 'block';
       document.getElementById('inst-modal').style.display   = 'flex';
     };
 
@@ -1638,6 +1641,7 @@
       document.getElementById('inst-f-status').value = 'pendiente';
       document.getElementById('inst-f-team').value   = 'netTime';
       document.getElementById('inst-modal-err').style.display = 'none';
+      document.getElementById('inst-delete-btn').style.display = 'none';
       document.getElementById('inst-modal').style.display = 'flex';
     };
 
@@ -1674,6 +1678,23 @@
       btn.textContent = 'Guardar';
 
       if (error) {
+        err.textContent = 'Error: ' + error.message;
+        err.style.display = 'block';
+        return;
+      }
+      closeInstModal();
+      await loadAll();
+    };
+
+    window.deleteInst = async function() {
+      if (!instModalId) return;
+      if (!confirm('¿Eliminar esta instalación?')) return;
+      const btn = document.getElementById('inst-delete-btn');
+      btn.disabled = true;
+      const { error } = await sb.from('installations').delete().eq('id', instModalId);
+      btn.disabled = false;
+      if (error) {
+        const err = document.getElementById('inst-modal-err');
         err.textContent = 'Error: ' + error.message;
         err.style.display = 'block';
         return;
