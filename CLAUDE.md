@@ -43,7 +43,7 @@ Zoho API ────┘                                          │
 **Sections (nav order):** Resumen, Proyectos, Instalaciones, Tickets, Pedidos, **Tareas Internas**, **Actividades Equipo**, Historial.
 
 - Resumen: KPI cards + últimos movimientos instalaciones
-- Proyectos: kanban + progress bar. **Scope toggle** (`activeProjectScope`, default `'activos'`, reset en `switchSection`): pills "Activos" / "Completados" / "Todos" sobre la tabla — "Activos" oculta `completado` y `cancelado` (mismo criterio que el KPI "proyectos activos" de Resumen). `projectMatchesScope(p, scope)` es el único punto que decide inclusión por scope; el filtro de grupo (netTime/SPECManager/SPEC Argentina) se aplica después, sobre el resultado ya filtrado por scope.
+- Proyectos: kanban + progress bar. **Scope toggle** (`activeProjectScope`, default `'activos'`, reset en `switchSection`): pills "Activos" / "Todos" sobre la tabla — "Activos" muestra `pendiente`/`en_progreso`/`en_revision`/`frenado` y oculta `completado`/`cancelado` (mismo criterio que el KPI "proyectos activos" de Resumen). `projectMatchesScope(p, scope)` es el único punto que decide inclusión por scope; el filtro de grupo (netTime/SPECManager/SPEC Argentina) se aplica después, sobre el resultado ya filtrado por scope. Sin pestaña "Completados" separada — decisión explícita del usuario, ver esos proyectos vía "Todos" si hace falta.
 - Instalaciones: table, CRUD completo desde el frontend (crear, editar, eliminar — anon key con políticas RLS de escritura en `installations`; botón "Eliminar" en el modal de edición, solo visible en modo edit)
 - Tickets: table + iframe to `https://n8n.vive-ia.com/webhook/zammad-dashboard`
 - Pedidos: table

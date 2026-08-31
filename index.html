@@ -629,14 +629,12 @@
     const PROJ_GROUPS = ['Todos', 'netTime', 'SPECManager', 'SPEC Argentina'];
     const PROJ_GRP_ACCENT = { 'netTime': 'var(--acc)', 'SPECManager': 'var(--acc3)', 'SPEC Argentina': 'var(--acc2)' };
     const PROJECT_SCOPES = [
-      {id:'activos',     label:'Activos'},
-      {id:'completados',  label:'Completados'},
-      {id:'todos',        label:'Todos'},
+      {id:'activos', label:'Activos'},
+      {id:'todos',   label:'Todos'},
     ];
-    // 'activos' oculta completado y cancelado (foco operativo); 'completados' muestra solo completado
+    // 'activos' = pendiente, en_progreso, en_revision, frenado (oculta completado y cancelado)
     function projectMatchesScope(p, scope) {
       if (scope === 'todos') return true;
-      if (scope === 'completados') return p.status === 'completado';
       return p.status !== 'completado' && p.status !== 'cancelado';
     }
 
