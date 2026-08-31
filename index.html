@@ -355,6 +355,7 @@
     let activeTaskStatus   = 'Todos';
     let activeTaskTeam     = 'Todos';
     let activeProjectGroup  = 'Todos';
+    let activeProjectScope  = 'activos'; // 'activos' | 'completados' | 'todos' — default activos (oculta completado/cancelado)
     let activeTicketProduct = 'Todos';
     let activeTicketGroup   = 'Todos';
     let activeTicketPeriod  = 'mes';
@@ -458,6 +459,7 @@
       filterTicketClient  = '';
       filterPedidoClient  = '';
       activeProjectGroup  = 'Todos';
+      activeProjectScope  = 'activos';
       activeTicketProduct = 'Todos';
       activeTicketScope   = 'abiertos';
       activeActUser       = 'Todos';
@@ -626,13 +628,25 @@
     // ── SECCIÓN: PROYECTOS ────────────────────────────────────────────
     const PROJ_GROUPS = ['Todos', 'netTime', 'SPECManager', 'SPEC Argentina'];
     const PROJ_GRP_ACCENT = { 'netTime': 'var(--acc)', 'SPECManager': 'var(--acc3)', 'SPEC Argentina': 'var(--acc2)' };
+    const PROJECT_SCOPES = [
+      {id:'activos',     label:'Activos'},
+      {id:'completados',  label:'Completados'},
+      {id:'todos',        label:'Todos'},
+    ];
+    // 'activos' oculta completado y cancelado (foco operativo); 'completados' muestra solo completado
+    function projectMatchesScope(p, scope) {
+      if (scope === 'todos') return true;
+      if (scope === 'completados') return p.status === 'completado';
+      return p.status !== 'completado' && p.status !== 'cancelado';
+    }
 
     function renderProyectos() {
       if (!D.projects.length) return empty('proyectos');
 
+      const scoped = D.projects.filter(p => projectMatchesScope(p, activeProjectScope));
       const filtered = activeProjectGroup === 'Todos'
-        ? D.projects
-        : D.projects.filter(p => p.team === activeProjectGroup);
+        ? scoped
+        : scoped.filter(p => p.team === activeProjectGroup);
 
       const sorted = sortData(filtered, 'proyectos', 'progress_pct', -1);
       window._proyectosExportData = sorted;
@@ -642,8 +656,18 @@
         <div class="sticky-bar">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <div style="display:flex;gap:3px;padding:3px;border-radius:99px;background:var(--row-b);border:1px solid var(--pill-br)">
+              ${PROJECT_SCOPES.map(sc => {
+                const cnt = D.projects.filter(p => projectMatchesScope(p, sc.id)).length;
+                const on = activeProjectScope === sc.id;
+                return `<button onclick="setProjectScope('${sc.id}')"
+                  style="padding:5px 14px;border-radius:99px;font-size:11px;font-weight:600;letter-spacing:0.03em;border:1px solid ${on?'var(--b2)':'transparent'};cursor:pointer;font-family:inherit;transition:all 0.15s;${on ? 'background:rgba(59,107,247,0.22);color:var(--t1)' : 'background:transparent;color:var(--t3)'}">
+                  ${sc.label} <span style="font-weight:400;opacity:0.65">${cnt}</span>
+                </button>`;
+              }).join('')}
+            </div>
+            <div style="display:flex;gap:3px;padding:3px;border-radius:99px;background:var(--row-b);border:1px solid var(--pill-br)">
               ${PROJ_GROUPS.map(g => {
-                const cnt = g === 'Todos' ? D.projects.length : D.projects.filter(p => p.team === g).length;
+                const cnt = g === 'Todos' ? scoped.length : scoped.filter(p => p.team === g).length;
                 if (cnt === 0 && g !== 'Todos') return '';
                 const on = activeProjectGroup === g;
                 return `<button onclick="setProjectGroup('${g}')"
@@ -695,7 +719,7 @@
                 }).join('')}
               </tbody>
             </table>
-          </div>` : `<div class="glass" style="border-radius:12px;padding:48px;text-align:center;color:var(--t3);font-size:12px">Sin proyectos para este equipo</div>`
+          </div>` : `<div class="glass" style="border-radius:12px;padding:48px;text-align:center;color:var(--t3);font-size:12px">Sin proyectos para este filtro</div>`
         }
       `;
     }
@@ -1718,6 +1742,10 @@
     };
     window.setProjectGroup = function(g) {
       activeProjectGroup = g;
+      render();
+    };
+    window.setProjectScope = function(s) {
+      activeProjectScope = s;
       render();
     };
     window.setTicketProduct = function(p) {
