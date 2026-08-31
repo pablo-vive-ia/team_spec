@@ -632,10 +632,15 @@
       {id:'activos', label:'Activos'},
       {id:'todos',   label:'Todos'},
     ];
-    // 'activos' = pendiente, en_progreso, en_revision, frenado (oculta completado y cancelado)
+    // 'activos' = solo en_progreso. 'todos' = todo excepto completado/cancelado
+    // (pendiente, en_progreso, en_revision, frenado) — completado y cancelado
+    // nunca se muestran en esta tabla, en ninguna de las dos pestañas.
+    const PROJECT_SCOPE_STATUSES = {
+      activos: ['en_progreso'],
+      todos:   ['pendiente', 'en_progreso', 'en_revision', 'frenado'],
+    };
     function projectMatchesScope(p, scope) {
-      if (scope === 'todos') return true;
-      return p.status !== 'completado' && p.status !== 'cancelado';
+      return (PROJECT_SCOPE_STATUSES[scope] || []).includes(p.status);
     }
 
     function renderProyectos() {
