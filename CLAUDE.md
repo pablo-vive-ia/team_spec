@@ -159,6 +159,19 @@ URLs:
 - Fallback cuando no hay "Seguimiento" abierto: última "Seguimiento" encontrada → `tasks[0]` → null
 - Proyectos sin `next_step` (esperado): ADIUM-ACCESOS no tiene tarea "Seguimiento" en Zoho; HONDA y KIMBERLY CLARCK tienen "Seguimiento" pero sin comentarios.
 
+### Estado de proyectos — bug crítico resuelto (2026-08-31)
+Detectado porque proyectos ya completados en Zoho (ej. HONDA - Contratas Capacitacion, SECCO - QA) seguían mostrándose "En progreso · 100%" indefinidamente en el dashboard.
+
+Dos bugs combinados en `Normalizar Proyectos Zoho` / `Comparar Proyectos`:
+1. **Mapeo de estado leía el campo equivocado**: `statusKey = p.project_type`, pero `project_type` en la respuesta de Zoho **siempre vale `"active"`** (no es el estado, es un campo de categoría). El estado real vive en `p.status.name`. Resultado: todo proyecto se creaba/actualizaba como `en_progreso` sin importar su estado real.
+2. **Sin reconciliación de huérfanos**: el fetch usa `?status=active`, que deja de devolver un proyecto una vez completado en Zoho. A diferencia de `Comparar Pedidos` (que sí cierra milestones huérfanos), `Comparar Proyectos` no tenía esa lógica — el registro quedaba congelado para siempre en Supabase.
+
+**Fix aplicado:**
+- `Normalizar Proyectos Zoho` ahora lee `p.status.name` (lowercased) contra un mapa de los 7 estados reales configurados en este portal de Zoho (documentados en la descripción HTML del proyecto FERRING - DEPOSITOS): `activo`/`en curso` → `en_progreso`, `en prueba` → `en_revision`, `retrasados`/`en espera` → `frenado`, `completado`/`completada` → `completado`, `cancelado`/`cancelada` → `cancelado`. Fallback: `p.is_completed ? 'completado' : 'pendiente'`.
+- `Comparar Proyectos` agrega reconciliación de huérfanos (mismo patrón que `Comparar Pedidos`): cualquier proyecto en Supabase con estado no-cerrado que Zoho ya no devuelve en el fetch se marca `completado` con `progress_pct: 100`.
+- Corrida manual post-fix (ejecución 12810) corrigió 8 proyectos de una vez: SECCO - QA, FERRING - DEPOSITOS, ADIUM - ACCESOS, SEABOARD (remapeo directo) + SV-BAGO, GC GESTION - ACCESOS, HONDA - Contratas Capacitacion, SV-STINE SEED (huérfanos → completado).
+- **Pendiente, no crítico**: el flujo normal de update de proyectos no setea `updated_at` (solo los huérfanos lo hacen) — la columna queda con la fecha del último campo que sí se actualizó, no sirve como "última sincronización" real.
+
 ### Team detection (proyectos)
 El grupo del proyecto en Zoho determina el equipo. Grupos conocidos:
 - **netTime**: "netTime 6", "netTime Lite", "netTime One", "SPEC ARGENTINA"
