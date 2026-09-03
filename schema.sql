@@ -226,3 +226,143 @@ ALTER TABLE team_activities ENABLE ROW LEVEL SECURITY;
 DO $$ BEGIN
   CREATE POLICY "lectura publica" ON team_activities FOR SELECT USING (true);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- ============================================================
+-- AUTH Y ROLES — PARTE 1 (ADITIVA)  ✅ aplicada 2026-09-03
+-- Base del módulo de Planificación + control de acceso por rol.
+-- No modifica ninguna policy existente: es seguro correrla sola.
+-- ============================================================
+
+-- Campo "próximo paso" de las tareas
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS next_step text;
+
+CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON public.tasks(due_date);
+CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON public.tasks(assignee);
+
+-- Perfiles: un rol por usuario de Supabase Auth
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id         uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email      text,
+  full_name  text,
+  role       text NOT NULL DEFAULT 'viewer',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+DO $$ BEGIN
+  ALTER TABLE public.profiles
+    ADD CONSTRAINT profiles_role_check CHECK (role IN ('admin','viewer'));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+-- Alta automática de perfil al crear un usuario en Auth. Default: viewer.
+-- Para crear un admin: user metadata {"role":"admin"} al darlo de alta, o
+-- UPDATE public.profiles SET role='admin' WHERE email='...'
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $fn$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name, role)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NULLIF(NEW.raw_user_meta_data->>'full_name',''), split_part(NEW.email,'@',1)),
+    CASE WHEN NEW.raw_user_meta_data->>'role' = 'admin' THEN 'admin' ELSE 'viewer' END
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END $fn$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Backfill para usuarios creados antes del trigger
+INSERT INTO public.profiles (id, email, full_name, role)
+SELECT u.id, u.email, split_part(u.email,'@',1), 'viewer'
+  FROM auth.users u
+ WHERE NOT EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = u.id);
+
+-- Helper de rol usado por las policies de escritura.
+-- SECURITY DEFINER => corre como owner => bypassea el RLS de profiles, así que
+-- se puede invocar dentro de las policies de tasks/installations sin recursión.
+-- SET search_path es obligatorio: sin él, la función es secuestrable.
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $fn$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+     WHERE id = auth.uid() AND role = 'admin'
+  );
+$fn$;
+
+REVOKE EXECUTE ON FUNCTION public.is_admin() FROM PUBLIC, anon;
+GRANT  EXECUTE ON FUNCTION public.is_admin() TO authenticated;
+
+-- profiles: cada usuario lee SOLO su propio perfil.
+-- Sin subquery => sin recursión de RLS. Sin INSERT/UPDATE desde el cliente
+-- => un viewer no puede auto-promoverse a admin.
+DROP POLICY IF EXISTS "profiles self select" ON public.profiles;
+CREATE POLICY "profiles self select" ON public.profiles
+  FOR SELECT TO authenticated USING (id = auth.uid());
+
+
+-- ============================================================
+-- AUTH Y ROLES — PARTE 2 (RLS RESTRICTIVA)   ⚠️ NO aplicada aún
+-- ============================================================
+-- ORDEN OBLIGATORIO: correr esto SOLO cuando (a) existan los usuarios en
+-- Supabase Auth, (b) esté OFF el registro público, y (c) el frontend con
+-- login ya esté publicado y verificado. Antes de eso, deja el sitio sin datos.
+--
+-- Se usa DROP + CREATE (no el patrón DO $$ ... duplicate_object del resto del
+-- archivo) porque acá hay que REEMPLAZAR: las policies son OR-aditivas y una
+-- sola policy permisiva sobrante anularía todo el hardening.
+--
+-- Los syncs de n8n NO se ven afectados: usan service_role, que bypassea RLS.
+-- ============================================================
+--
+-- BEGIN;
+--
+-- -- Lectura: de público a solo autenticados
+-- DROP POLICY IF EXISTS "lectura publica" ON public.projects;
+-- CREATE POLICY "read authenticated" ON public.projects        FOR SELECT TO authenticated USING (true);
+-- DROP POLICY IF EXISTS "lectura publica" ON public.tickets;
+-- CREATE POLICY "read authenticated" ON public.tickets         FOR SELECT TO authenticated USING (true);
+-- DROP POLICY IF EXISTS "lectura publica" ON public.orders;
+-- CREATE POLICY "read authenticated" ON public.orders          FOR SELECT TO authenticated USING (true);
+-- DROP POLICY IF EXISTS "lectura publica" ON public.status_log;
+-- CREATE POLICY "read authenticated" ON public.status_log      FOR SELECT TO authenticated USING (true);
+-- DROP POLICY IF EXISTS "lectura publica" ON public.team_activities;
+-- CREATE POLICY "read authenticated" ON public.team_activities FOR SELECT TO authenticated USING (true);
+--
+-- -- Installations: lectura autenticada, escritura solo admin
+-- DROP POLICY IF EXISTS "lectura publica"           ON public.installations;
+-- DROP POLICY IF EXISTS "anon insert installations" ON public.installations;
+-- DROP POLICY IF EXISTS "anon update installations" ON public.installations;
+-- DROP POLICY IF EXISTS "anon delete installations" ON public.installations;
+-- CREATE POLICY "read authenticated" ON public.installations FOR SELECT TO authenticated USING (true);
+-- CREATE POLICY "admin insert"       ON public.installations FOR INSERT TO authenticated WITH CHECK (public.is_admin());
+-- CREATE POLICY "admin update"       ON public.installations FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+-- CREATE POLICY "admin delete"       ON public.installations FOR DELETE TO authenticated USING (public.is_admin());
+--
+-- -- Tasks: idem. OJO, las policies viejas son TO public (no TO anon), o sea que
+-- -- hoy cualquier usuario authenticated hereda escritura completa — ese es
+-- -- exactamente el bug que rompería el acceso de solo lectura.
+-- DROP POLICY IF EXISTS "lectura publica"       ON public.tasks;
+-- DROP POLICY IF EXISTS "escritura interna"     ON public.tasks;
+-- DROP POLICY IF EXISTS "actualizacion interna" ON public.tasks;
+-- DROP POLICY IF EXISTS "eliminacion interna"   ON public.tasks;
+-- CREATE POLICY "read authenticated" ON public.tasks FOR SELECT TO authenticated USING (true);
+-- CREATE POLICY "admin insert"       ON public.tasks FOR INSERT TO authenticated WITH CHECK (public.is_admin());
+-- CREATE POLICY "admin update"       ON public.tasks FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+-- CREATE POLICY "admin delete"       ON public.tasks FOR DELETE TO authenticated USING (public.is_admin());
+--
+-- COMMIT;

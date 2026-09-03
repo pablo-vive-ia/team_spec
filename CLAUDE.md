@@ -25,7 +25,8 @@ Zoho API ────┘                                          │
 - **Project ref:** `osnttxgmsfudghinxfat`
 - **MCP access:** available via `.mcp.json` — apply schema via MCP or SQL Editor
 - **Schema:** `schema.sql` (idempotente, seguro para re-ejecutar con IF NOT EXISTS)
-- **Security model:** anon key is hardcoded in client JS — this is intentional. Security comes from RLS policies (public read, service_role write from n8n only). Do not treat this as a vulnerability.
+- **Security model:** anon key is hardcoded in client JS — this is intentional y por sí sola no da acceso a nada. Toda la autorización vive en RLS. **Modelo por roles (desde 2026-09-03):** Supabase Auth con email+password; tabla `profiles` (`id` FK a `auth.users`, `role` en `admin`|`viewer`) y helper `public.is_admin()` (SECURITY DEFINER, bypassea el RLS de `profiles` para no recursar). `admin` escribe; `viewer` solo lee. Los syncs de n8n usan `service_role`, que bypassea RLS — no se ven afectados por ningún cambio de policy.
+  - ⚠️ **Parte 2 del hardening pendiente de aplicar** (ver final de `schema.sql`): hoy las policies de lectura siguen siendo `TO public` y las de escritura de `tasks` son `TO public` (¡no `TO anon`!), o sea que **cualquier usuario `authenticated` hereda escritura completa**. Hasta correr la Parte 2, el rol `viewer` es solo cosmético en la UI. Orden obligatorio: usuarios creados → signups OFF → frontend publicado → recién ahí Parte 2.
 - **Realtime:** subscriptions on 6 tables (`projects`, `installations`, `tickets`, `orders`, `status_log`, `tasks`) — no polling needed in the frontend.
 - **Aplicar schema:** ir a [SQL Editor](https://supabase.com/dashboard/project/osnttxgmsfudghinxfat/sql/new) y ejecutar `schema.sql` completo.
 
@@ -40,14 +41,16 @@ Zoho API ────┘                                          │
 
 **Team selector:** top-level tabs "netTime" / "SPECManager" that apply `.eq('team', activeTeam)` to every Supabase query. Same HTML, different filter — not two pages.
 
-**Sections (nav order):** Resumen, Proyectos, Instalaciones, Tickets, Pedidos, **Tareas Internas**, **Actividades Equipo**, Historial.
+**Sections (nav order):** Resumen, Proyectos, Instalaciones, Tickets, Pedidos, **Planificación**, **Actividades Equipo**, Historial.
+
+**Auth:** la app entra por una pantalla de login (`#auth-gate`) contra Supabase Auth. Sin sesión no se renderiza nada (regla CSS `body:not(.authed)`, no depende de JS). `canEdit()` es la única fuente de verdad de permisos en la UI; cada handler de mutación además guardea con `requireAdmin()`. El enforcement real es RLS. El gate viejo (Netlify Identity + password `grupospec2025` hardcodeada) fue eliminado.
 
 - Resumen: KPI cards + últimos movimientos instalaciones
 - Proyectos: kanban + progress bar. **Scope toggle** (`activeProjectScope`, default `'activos'`, reset en `switchSection`): pills "Activos" / "Todos" sobre la tabla. "Activos" = solo `en_progreso`; "Todos" = `pendiente`/`en_progreso`/`en_revision`/`frenado`. **`completado` y `cancelado` nunca se muestran en esta tabla, en ninguna de las dos pestañas** — decisión explícita del usuario (2026-08-31): un proyecto completado no debe figurar más en la vista de Proyectos, ni siquiera en "Todos" (pese al nombre, no es literalmente "todos los estados"). `PROJECT_SCOPE_STATUSES` mapea cada scope a su lista de estados permitidos; `projectMatchesScope(p, scope)` es el único punto que decide inclusión. El filtro de grupo (netTime/SPECManager/SPEC Argentina) se aplica después, sobre el resultado ya filtrado por scope.
 - Instalaciones: table, CRUD completo desde el frontend (crear, editar, eliminar — anon key con políticas RLS de escritura en `installations`; botón "Eliminar" en el modal de edición, solo visible en modo edit)
 - Tickets: table + iframe to `https://n8n.vive-ia.com/webhook/zammad-dashboard`
 - Pedidos: table
-- **Tareas Internas**: gestión de tareas internas del equipo (CRUD completo desde el frontend)
+- **Planificación**: tablero semanal de tareas del equipo por persona (CRUD completo, solo admin)
 - **Actividades Equipo**: resumen de registros de tiempo del equipo técnico sincronizados desde Zoho (solo lectura, sync-only)
 - Historial: status_log timeline — solo instalaciones
 
@@ -78,18 +81,36 @@ All JS-generated HTML uses these variables in inline styles — never hardcode `
 
 **Select dropdowns:** all `<select>` and `<option>` have global CSS rules for dark/light contrast — never style options inline without matching both modes.
 
-### Tareas Internas
+### Planificación (tablero semanal del equipo)
 
-- Tab "TAREAS INTERNAS" posicionado antes de HISTORIAL en el nav.
-- CRUD completo: crear, editar, eliminar, ciclar estado desde el frontend (anon key con políticas RLS de escritura en `tasks`).
-- **Sin filtro de equipo** — el campo `team` no se muestra ni en tabla ni en modal; la DB usa el default `netTime`.
-- Campos del modal: título (obligatorio), descripción, responsable, prioridad (baja/media/alta/urgente), estado, fecha de vencimiento.
-- Tabla: TAREA, RESPONSABLE, PRIORIDAD, ESTADO (badge clickeable que cicla), VENCE, acciones (Editar / ✕).
-- Filas vencidas: `border-left:3px solid var(--danger)` + fondo rojo tenue + ⚠ en fecha.
-- Estado cicla: `pendiente → en_progreso → completado → pendiente`; cancelado solo vía modal.
-- Stats compactos (chips horizontales, no kpi()): Pendientes, En progreso, Vencidas, Completadas — usan layout flex en lugar del grid de kpi() grande.
-- Filtro de estado (pills): Todos / Pendiente / En progreso / Completado / Cancelado.
-- `tasks` es la única tabla donde el anon key puede INSERT/UPDATE/DELETE (tool interno protegido por Netlify Identity en prod).
+Reemplazó a "Tareas Internas" (2026-09-03). Misma tabla `tasks`, módulo reescrito para seguimiento semanal del equipo técnico — sustituye al Microsoft Planner que se usaba antes.
+
+- Tab "PLANIFICACIÓN" (id interno de sección sigue siendo `tareas`), antes de ACTIVIDADES EQUIPO.
+- **Solo `next_step` se agregó como campo nuevo.** Decisión explícita: sin checklist/subtareas, sin cliente/proyecto asociado, y **sin columna de semana** — la semana se deriva de `due_date`.
+- **Dos vistas** (`taskView`, persistido en `localStorage['spec-task-view']`, NO se resetea en `switchSection` porque es preferencia del usuario):
+  - **Tablero** (default): una columna por persona, tarjetas con prioridad como borde izquierdo, título, próximo paso destacado, chip de estado clickeable y fecha.
+  - **Tabla**: la tabla densa de antes + columna PRÓXIMO PASO. Opera sobre el mismo set semanal, así el navegador de semanas aplica a las dos.
+- **Navegador de semanas** (`taskWeekOffset`, reset a 0 en `switchSection`): ‹ / › / botón "Hoy". Semana ISO lunes–domingo, misma fórmula que `actPeriodStart('semana')`.
+- **Bucketing semanal sin columna de semana** — `buildWeekBuckets(tasks, offset)` es el único punto que decide qué entra:
+  | Bucket | Condición | Se muestra |
+  |---|---|---|
+  | `inWeek` | `ws ≤ due ≤ we` | siempre |
+  | `carry` (ARRASTRE) | `due < ws` y la tarea está abierta | **solo en la semana actual** |
+  | `noDate` (SIN FECHA) | sin `due_date` y abierta | **solo en la semana actual** |
+
+  Garantiza que ninguna tarea abierta quede invisible (volver a "Hoy" muestra el 100% del pendiente) sin duplicar: navegando a semanas pasadas se ve la foto histórica real. Las cerradas/canceladas no arrastran.
+- **⚠️ `dueOf(t)` es obligatorio para toda comparación de fechas.** `due_date` es `DATE` y `new Date('2026-09-07')` parsea como medianoche **UTC**, que en AR (UTC-3) retrocede al 06 — movería la tarea de semana. `dueOf()` fuerza `T12:00:00`. Este bug existía en el código viejo.
+- **Responsables**: `assignee` sigue siendo texto libre (no se agregó FK). Cuatro capas contra el problema de "Pablo" vs "Pablo Frisardi":
+  1. `TEAM_MEMBERS` — lista canónica que define las columnas. **Un miembro sin tareas igual tiene columna** (vacía = señal útil en la reunión).
+  2. `canonAssignee()` en runtime (normaliza acentos/mayúsculas/espacios + `TASK_ASSIGNEE_ALIAS`). **No hace merge automático por primer token**: si mañana entra otro Pablo, se mezclarían en silencio.
+  3. `<datalist>` en el modal — la mitigación preventiva real.
+  4. Un responsable desconocido **nunca se descarta**: obtiene columna propia marcada con ⚠.
+- **Color y orden de columnas estables**: `buildAssigneeOrder(D.tasks)` rankea sobre el dataset **completo** (mismo criterio que `buildGroupColorMap`), así una persona no cambia de color ni de posición al navegar semanas o filtrar.
+- Stats de la semana visible: De la semana / En progreso / Completadas / Arrastre / Sin fecha (los dos últimos solo si la semana es la actual y hay > 0).
+- Filtros: estado y responsable (data-driven desde `order`).
+- Export CSV/PDF — el **PDF va agrupado por responsable**, para que el impreso refleje el tablero y no una tabla plana.
+- El botón `+` del header de cada columna precarga responsable y el **viernes de la semana visible** — es el mecanismo que hace natural el agrupamiento por `due_date` sin campo de semana.
+- **Permisos**: todos los controles de escritura se omiten del HTML si `!canEdit()`, y cada handler guardea con `requireAdmin()`. Un `viewer` ve el tablero completo sin un solo botón de edición.
 
 ### Actividades Equipo
 
@@ -132,8 +153,8 @@ URLs:
 
 ## Current Status
 
-- `index.html` — ✅ completo. Sin servicios, sin Telegram en frontend. Anon key hardcoded. Branding Grupo SPEC (Plus Jakarta Sans, paleta corporativa, logo via `logo.png`). Light/dark toggle, fechas absolutas, columna zammad_id + zammad_number, stale ticket alerts, CSS variable theming completo. Resumen e Historial filtrados a instalaciones. Sección TAREAS INTERNAS con CRUD completo. Sección ACTIVIDADES EQUIPO (solo lectura) con KPIs, barras horizontales por categoría, filtros período/técnico/categoría, tabla por técnico y export CSV/PDF — ✅ sincronizando datos reales desde Zoho (755 registros del año en curso al 2026-07-22).
-- `schema.sql` — ✅ idempotente (IF NOT EXISTS + DO $$ EXCEPTION en enums/policies). Sin tabla services. Migraciones idempotentes: `nivel_soporte`, `time_unit`, `zammad_number` en tickets. Tabla `tasks` con RLS (anon puede leer y escribir). Tabla `installations` con RLS (anon puede leer, crear, actualizar y — desde 2026-08-10 — eliminar; el archivo estaba desincronizado con la DB real, que ya tenía insert/update de una migración previa no documentada). Tabla `team_activities` con RLS (anon solo lectura, escritura vía service_role/n8n) ✅ aplicada en Supabase.
+- `index.html` — ✅ completo. Sin servicios, sin Telegram en frontend. Anon key hardcoded. Branding Grupo SPEC (Plus Jakarta Sans, paleta corporativa, logo via `logo.png`). Light/dark toggle, fechas absolutas, columna zammad_id + zammad_number, stale ticket alerts, CSS variable theming completo. Resumen e Historial filtrados a instalaciones. Sección PLANIFICACIÓN (tablero semanal por persona, CRUD solo admin). Login con Supabase Auth. Sección ACTIVIDADES EQUIPO (solo lectura) con KPIs, barras horizontales por categoría, filtros período/técnico/categoría, tabla por técnico y export CSV/PDF — ✅ sincronizando datos reales desde Zoho (755 registros del año en curso al 2026-07-22).
+- `schema.sql` — ✅ idempotente (IF NOT EXISTS + DO $$ EXCEPTION en enums/policies). Sin tabla services. Migraciones idempotentes: `nivel_soporte`, `time_unit`, `zammad_number` en tickets. Tabla `tasks` con RLS (anon puede leer y escribir). Tabla `installations` con RLS (anon puede leer, crear, actualizar y — desde 2026-08-10 — eliminar; el archivo estaba desincronizado con la DB real, que ya tenía insert/update de una migración previa no documentada). Tabla `team_activities` con RLS (anon solo lectura, escritura vía service_role/n8n) ✅ aplicada en Supabase. **Auth Parte 1** (columna `next_step`, tabla `profiles`, trigger `on_auth_user_created`, `is_admin()`) ✅ aplicada 2026-09-03. **Auth Parte 2** (RLS restrictiva) ⏳ pendiente — está comentada al final del archivo con el orden obligatorio de ejecución.
 - `logo.png` — ✅ en raíz del proyecto.
 - Supabase MCP — ✅ configurado en `.mcp.json` (`osnttxgmsfudghinxfat`).
 - n8n MCP — ✅ configurado en `.mcp.json` via HTTP transport (`https://n8n.vive-ia.com/mcp-server/http`).
@@ -311,7 +332,13 @@ Al crear una instalación nueva, el LLM devuelve `entity_id: null` (el registro 
 
 1. **Aplicar schema.sql** en Supabase SQL Editor — ✅ ya aplicado (incluye `team_activities`)
 2. ~~Zammad credential~~ — ✅ ya estaba activa, la nota vieja era desactualizada. Workflow `votsdMSzgAHnTSA0` corriendo y ampliado el 2026-08-04 (cerrados recientes + exclusión de Pedidos)
-3. **Netlify deploy** — drag & drop de la carpeta (sin `netlify.toml`)
+3. ~~Netlify deploy~~ — ✅ auto-deploy conectado al repo de GitHub (push a `master` publica solo)
+3b. **Activar accesos por rol** (en este orden, ver `schema.sql` final):
+   1. Supabase Dashboard > Authentication > Users > Add user, **marcando "Auto Confirm User"** — sin eso `signInWithPassword` devuelve `Email not confirmed`. Crear el admin + los 3 viewers.
+   2. `UPDATE public.profiles SET role='admin' WHERE email='<el de Pablo>';`
+   3. Dashboard > Authentication > **Allow new users to sign up = OFF**. Crítico: con signups abiertos, cualquiera con la anon key (que es pública) se auto-registra y obtiene lectura total.
+   4. Recién entonces correr la **Parte 2** de `schema.sql`. Verificar: `curl` anon a `/rest/v1/tasks` → `[]`; un viewer haciendo `insert` desde consola → error `42501`; correr los 2 syncs de n8n y confirmar que siguen escribiendo.
+   - Sin contraseña de recuperación: el SMTP default de Supabase solo envía a miembros del proyecto, así que los viewers no recibirían el mail. El admin resetea desde el Dashboard (el login lo dice).
 4. ~~Re-autorizar `Zoho_project`~~ — ✅ hecho 2026-07-22, rama de Actividades Equipo sincronizando datos reales (755 registros del año en curso)
 5. **Opcional:** ampliar el backfill de Actividades Equipo a todo el histórico de Zoho (hoy solo trae el año en curso, ver "Actividades Equipo — Time Logs de Zoho" arriba) — requiere correr el workflow manualmente con la ventana temporal ampliada, dado que el sync incremental normal ya no volvería a hacer backfill una vez que la tabla tiene datos
 

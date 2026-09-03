@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 
   <script type="importmap">
-    {"imports":{"@supabase/supabase-js":"https://esm.sh/@supabase/supabase-js@2"}}
+    {"imports":{"@supabase/supabase-js":"https://esm.sh/@supabase/supabase-js@2.58.0"}}
   </script>
 
   <script src="https://cdn.tailwindcss.com"></script>
@@ -231,10 +231,64 @@
     body.light .sticky-bar {
       background: rgba(241,245,249,0.95);
     }
+
+    /* Gate de login: oculta la app hasta que haya sesion validada.
+       Va en CSS (no en JS) para que no haya flash del dashboard vacio
+       mientras getSession() resuelve. */
+    body:not(.authed) header,
+    body:not(.authed) nav,
+    body:not(.authed) main    { display: none !important; }
+    body.authed     #auth-gate { display: none !important; }
+
+    .auth-field {
+      width: 100%; border-radius: 8px; padding: 10px 12px; font-size: 13px;
+      color: var(--t1); background: var(--row-b); border: 1px solid var(--b1);
+      font-family: inherit; transition: border-color 0.15s; outline: none;
+    }
+    .auth-field:focus { border-color: rgba(59,107,247,0.5); }
+    .auth-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+      color: var(--t3); display: block; margin-bottom: 6px;
+    }
   </style>
-  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
 </head>
 <body>
+
+  <!-- GATE DE LOGIN -->
+  <div id="auth-gate" style="position:fixed;inset:0;z-index:900;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--bg)">
+    <div style="width:100%;max-width:376px">
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:22px">
+        <img src="logo.png" alt="Grupo SPEC" style="height:30px;object-fit:contain"
+             onerror="this.style.display='none'">
+        <div style="display:flex;flex-direction:column;line-height:1.15">
+          <span style="font-size:8px;font-weight:600;letter-spacing:0.18em;color:var(--t3)">GRUPO SPEC</span>
+          <span style="font-size:14px;font-weight:700;letter-spacing:0.03em;color:var(--t1)">Operaciones</span>
+        </div>
+      </div>
+
+      <div class="glass" style="border-radius:18px;padding:30px 28px">
+        <p style="font-size:11px;font-weight:700;letter-spacing:0.14em;color:var(--t3);margin-bottom:20px;text-align:center">ACCESO AL PANEL</p>
+        <form id="auth-form" onsubmit="event.preventDefault();doLogin()">
+          <div style="margin-bottom:14px">
+            <label class="auth-label" for="auth-email">EMAIL</label>
+            <input id="auth-email" class="auth-field" type="email" autocomplete="username" required placeholder="tu@grupospec.com">
+          </div>
+          <div style="margin-bottom:16px">
+            <label class="auth-label" for="auth-pass">CONTRASEÑA</label>
+            <input id="auth-pass" class="auth-field" type="password" autocomplete="current-password" required placeholder="••••••••">
+          </div>
+          <div id="auth-err" style="display:none;font-size:11px;line-height:1.45;color:#FCA5A5;padding:9px 12px;background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.22);border-radius:8px;margin-bottom:14px"></div>
+          <button id="auth-btn" type="submit"
+            style="width:100%;padding:11px;border-radius:9px;border:none;background:var(--acc);color:#fff;font-size:12.5px;font-weight:700;letter-spacing:0.04em;cursor:pointer;font-family:inherit;transition:opacity 0.15s"
+            onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">Ingresar</button>
+        </form>
+      </div>
+
+      <p style="font-size:10px;color:var(--t3);margin-top:15px;text-align:center;line-height:1.5">
+        ¿Olvidaste tu contraseña? Contactá al administrador.
+      </p>
+    </div>
+  </div>
 
   <!-- Accent bar -->
   <div style="position:fixed;top:0;left:0;right:0;height:2.5px;background:linear-gradient(90deg,var(--acc3) 0%,var(--acc) 40%,var(--acc2) 75%,transparent 100%);z-index:60;pointer-events:none;box-shadow:0 0 10px var(--acc)"></div>
@@ -278,7 +332,11 @@
             <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"/>
           </svg>
         </button>
-        <button onclick="window.netlifyIdentity?window.netlifyIdentity.logout():(sessionStorage.clear(),location.reload())" title="Cerrar sesión"
+        <div id="user-chip" style="display:none;align-items:center;gap:7px;padding:4px 5px 4px 11px;border-radius:99px;background:var(--row-b);border:1px solid var(--pill-br);flex-shrink:0">
+          <span id="user-name" style="font-size:11px;font-weight:600;color:var(--t2);white-space:nowrap"></span>
+          <span id="user-role" style="font-size:8.5px;font-weight:700;letter-spacing:0.06em;padding:3px 7px;border-radius:99px;white-space:nowrap"></span>
+        </div>
+        <button onclick="doLogout()" title="Cerrar sesión"
           style="padding:0;width:34px;height:34px;border-radius:8px;border:1px solid var(--b1);background:var(--s1);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--t2);transition:all 0.15s;flex-shrink:0;font-family:inherit">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -299,7 +357,7 @@
         <button id="nav-instalaciones" onclick="switchSection('instalaciones')" class="nav-btn" style="padding:11px 16px;font-size:11px;font-weight:500;letter-spacing:0.07em;white-space:nowrap;position:relative;background:transparent;border:none;cursor:pointer;font-family:inherit;transition:color 0.15s;color:var(--t3)">INSTALACIONES</button>
         <button id="nav-tickets"       onclick="switchSection('tickets')"       class="nav-btn" style="padding:11px 16px;font-size:11px;font-weight:500;letter-spacing:0.07em;white-space:nowrap;position:relative;background:transparent;border:none;cursor:pointer;font-family:inherit;transition:color 0.15s;color:var(--t3)">TICKETS</button>
         <button id="nav-pedidos"       onclick="switchSection('pedidos')"       class="nav-btn" style="padding:11px 16px;font-size:11px;font-weight:500;letter-spacing:0.07em;white-space:nowrap;position:relative;background:transparent;border:none;cursor:pointer;font-family:inherit;transition:color 0.15s;color:var(--t3)">PEDIDOS</button>
-        <button id="nav-tareas"        onclick="switchSection('tareas')"        class="nav-btn" style="padding:11px 16px;font-size:11px;font-weight:500;letter-spacing:0.07em;white-space:nowrap;position:relative;background:transparent;border:none;cursor:pointer;font-family:inherit;transition:color 0.15s;color:var(--t3)">TAREAS INTERNAS</button>
+        <button id="nav-tareas"        onclick="switchSection('tareas')"        class="nav-btn" style="padding:11px 16px;font-size:11px;font-weight:500;letter-spacing:0.07em;white-space:nowrap;position:relative;background:transparent;border:none;cursor:pointer;font-family:inherit;transition:color 0.15s;color:var(--t3)">PLANIFICACIÓN</button>
         <button id="nav-actividades"   onclick="switchSection('actividades')"   class="nav-btn" style="padding:11px 16px;font-size:11px;font-weight:500;letter-spacing:0.07em;white-space:nowrap;position:relative;background:transparent;border:none;cursor:pointer;font-family:inherit;transition:color 0.15s;color:var(--t3)">ACTIVIDADES EQUIPO</button>
         <button id="nav-historial"     onclick="switchSection('historial')"     class="nav-btn" style="padding:11px 16px;font-size:11px;font-weight:500;letter-spacing:0.07em;white-space:nowrap;position:relative;background:transparent;border:none;cursor:pointer;font-family:inherit;transition:color 0.15s;color:var(--t3)">HISTORIAL</button>
       </div>
@@ -319,43 +377,21 @@
   <script type="module">
     import { createClient } from '@supabase/supabase-js';
 
-    // Auth: Netlify Identity en producción, fallback prompt en dev local
-    const _isLocal = ['localhost', '127.0.0.1', ''].includes(window.location.hostname);
-    if (!_isLocal && window.netlifyIdentity) {
-      await new Promise((resolve) => {
-        window.netlifyIdentity.on('init', user => {
-          if (user) resolve(user);
-          else window.netlifyIdentity.open('login');
-        });
-        window.netlifyIdentity.on('login', user => {
-          window.netlifyIdentity.close();
-          resolve(user);
-        });
-      });
-      window.netlifyIdentity.on('logout', () => location.reload());
-    } else {
-      const KEY = 'spec_auth', PWD = 'grupospec2025';
-      if (sessionStorage.getItem(KEY) !== PWD) {
-        const input = prompt('🔒 Grupo SPEC · Operaciones\nContraseña de acceso:');
-        if (input !== PWD) {
-          document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#888">Acceso denegado.</div>';
-          throw new Error('Acceso denegado');
-        }
-        sessionStorage.setItem(KEY, PWD);
-      }
-    }
-
-    // anon key es pública por diseño: RLS en Supabase permite solo SELECT para anon.
-    // Escritura solo vía service_role desde n8n. No tratar como secreto.
+    // anon key es pública por diseño: por sí sola no da acceso a nada.
+    // Toda la autorización vive en RLS de Supabase: lectura solo para usuarios
+    // autenticados, escritura solo para el rol admin (ver public.is_admin()).
+    // Los syncs de n8n escriben con service_role, que bypassea RLS.
     const SUPABASE_URL      = 'https://osnttxgmsfudghinxfat.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zbnR0eGdtc2Z1ZGdoaW54ZmF0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI5MzQ0OTgsImV4cCI6MjA2ODUxMDQ5OH0.hMkwavqQUDn5P3DnR5J8JB1aKSRV6sagEfKF_uOPGSE';
 
     let activeSection      = 'resumen';
     let filterClient       = '';
     let activeTaskStatus   = 'Todos';
-    let activeTaskTeam     = 'Todos';
+    let activeTaskAssignee = 'Todos';
+    let taskWeekOffset     = 0;   // 0 = semana actual, -1 anterior, +1 siguiente
+    let taskView           = localStorage.getItem('spec-task-view') || 'tablero';
     let activeProjectGroup  = 'Todos';
-    let activeProjectScope  = 'activos'; // 'activos' | 'completados' | 'todos' — default activos (oculta completado/cancelado)
+    let activeProjectScope  = 'activos'; // 'activos' | 'todos' — completado/cancelado nunca se muestran
     let activeTicketProduct = 'Todos';
     let activeTicketGroup   = 'Todos';
     let activeTicketPeriod  = 'mes';
@@ -377,9 +413,30 @@
       pedidos:       { col: 'progress_pct', dir: -1 },
       tickets:       { col: null,           dir:  1 },
       instalaciones: { col: null,           dir:  1 },
+      tareas:        { col: null,           dir:  1 },
     };
 
-    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession:     true,
+        autoRefreshToken:   true,
+        detectSessionInUrl: false,
+        storageKey:         'spec-sb-auth',
+      },
+    });
+
+    // ── SESIÓN Y ROL ───────────────────────────────────────────────────
+    // canEdit() es la única fuente de verdad de la UI para permisos de escritura.
+    // El enforcement real está en RLS (policies con public.is_admin()); esto solo
+    // evita mostrarle botones inútiles a un viewer.
+    let session   = null;
+    let myProfile = null;
+    function canEdit()      { return myProfile?.role === 'admin'; }
+    function requireAdmin() {
+      if (canEdit()) return true;
+      alert('Tu acceso es de solo lectura. No podés modificar datos.');
+      return false;
+    }
 
     const STATUS_ABIERTOS = ['abierto', 'nuevo', 'open', 'new'];
     function isTicketAbierto(t) {
@@ -424,6 +481,70 @@
         </div>`;
     }
 
+    // ── AUTH ───────────────────────────────────────────────────────────
+    const AUTH_ERRORS = {
+      'invalid login credentials': 'Email o contraseña incorrectos.',
+      'email not confirmed':       'El usuario todavía no está confirmado. Pedile al administrador que lo active.',
+      'too many requests':         'Demasiados intentos. Esperá un minuto y probá de nuevo.',
+    };
+    function mapAuthError(err) {
+      const raw = (err?.message || '').toLowerCase();
+      for (const k in AUTH_ERRORS) if (raw.includes(k)) return AUTH_ERRORS[k];
+      return err?.message || 'No se pudo iniciar sesión.';
+    }
+
+    // Fail-safe deliberado: si el perfil no se puede leer, se degrada a viewer,
+    // NUNCA a admin. Un error de red no debe otorgar permisos de escritura.
+    async function loadProfile() {
+      const { data, error } = await sb
+        .from('profiles').select('id,email,full_name,role')
+        .eq('id', session.user.id).maybeSingle();
+      myProfile = (!error && data)
+        ? data
+        : { id: session.user.id, email: session.user.email, role: 'viewer' };
+    }
+
+    function renderUserChip() {
+      const chip = document.getElementById('user-chip');
+      if (!chip || !myProfile) return;
+      const admin = canEdit();
+      document.getElementById('user-name').textContent =
+        myProfile.full_name || (myProfile.email || '').split('@')[0];
+      const role = document.getElementById('user-role');
+      role.textContent   = admin ? 'ADMIN' : 'SOLO LECTURA';
+      role.style.cssText = 'font-size:8.5px;font-weight:700;letter-spacing:0.06em;padding:3px 7px;border-radius:99px;white-space:nowrap;' +
+        (admin ? 'background:rgba(59,107,247,0.18);color:var(--acc)'
+               : 'background:var(--s2);color:var(--t3)');
+      chip.style.display = 'flex';
+    }
+
+    function showLoginError(msg) {
+      const el = document.getElementById('auth-err');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    window.doLogin = async function() {
+      const email = document.getElementById('auth-email').value.trim();
+      const pass  = document.getElementById('auth-pass').value;
+      const btn   = document.getElementById('auth-btn');
+      document.getElementById('auth-err').style.display = 'none';
+      btn.disabled = true; btn.textContent = 'Ingresando…';
+      const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+      btn.disabled = false; btn.textContent = 'Ingresar';
+      if (error) { showLoginError(mapAuthError(error)); return; }
+      session = data.session;
+      await loadProfile();
+      document.body.classList.add('authed');
+      renderUserChip();
+      await startApp();
+    };
+
+    window.doLogout = async function() {
+      await sb.auth.signOut();
+      location.reload();
+    };
+
     // ── REALTIME ───────────────────────────────────────────────────────
     const rtChannels = [];
     function subscribeRealtime() {
@@ -460,6 +581,9 @@
       filterPedidoClient  = '';
       activeProjectGroup  = 'Todos';
       activeProjectScope  = 'activos';
+      activeTaskStatus    = 'Todos';
+      activeTaskAssignee  = 'Todos';
+      taskWeekOffset      = 0;
       activeTicketProduct = 'Todos';
       activeTicketScope   = 'abiertos';
       activeActUser       = 'Todos';
@@ -740,7 +864,7 @@
       const instHeader = `
         <div style="margin-bottom:24px;display:flex;align-items:center;gap:12px">
           <p style="font-size:11px;font-weight:700;letter-spacing:0.14em;color:var(--t3)">INSTALACIONES</p>
-          <button onclick="openNewInstModal()" style="margin-left:auto;padding:6px 14px;font-size:11px;font-weight:700;letter-spacing:0.06em;border-radius:8px;border:1px solid rgba(59,107,247,0.35);background:rgba(59,107,247,0.12);color:#93C5FD;cursor:pointer;font-family:inherit;transition:all 0.15s" onmouseover="this.style.background='rgba(59,107,247,0.22)'" onmouseout="this.style.background='rgba(59,107,247,0.12)'">+ NUEVA</button>
+          ${canEdit() ? `<button onclick="openNewInstModal()" style="margin-left:auto;padding:6px 14px;font-size:11px;font-weight:700;letter-spacing:0.06em;border-radius:8px;border:1px solid rgba(59,107,247,0.35);background:rgba(59,107,247,0.12);color:#93C5FD;cursor:pointer;font-family:inherit;transition:all 0.15s" onmouseover="this.style.background='rgba(59,107,247,0.22)'" onmouseout="this.style.background='rgba(59,107,247,0.12)'">+ NUEVA</button>` : ''}
         </div>`;
       if (!D.installations.length) return instHeader + empty('instalaciones');
       return `
@@ -763,7 +887,7 @@
                   </tr></thead>
                   <tbody>
                     ${items.map(i => `
-                      <tr class="hr" style="border-bottom:1px solid var(--row-b);cursor:pointer;--accent:${rowAccent(i.status)}" onclick="openInstModal('${i.id}')">
+                      <tr class="${canEdit()?'hr':''}" style="border-bottom:1px solid var(--row-b);${canEdit()?'cursor:pointer;':''}--accent:${rowAccent(i.status)}" ${canEdit()?`onclick="openInstModal('${i.id}')"`:''}>
                         <td style="padding:11px 14px;color:var(--t1);font-weight:500">${esc(i.technician)}</td>
                         <td style="padding:11px 14px;color:var(--t2)">${esc(i.client)||'—'}</td>
                         <td style="padding:11px 14px;color:var(--t2);max-width:200px"><span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(i.description)||'—'}</span></td>
@@ -1641,6 +1765,7 @@
     }
 
     window.openInstModal = function(id) {
+      if (!requireAdmin()) return;
       const inst = D.installations.find(i => i.id === id);
       if (!inst) return;
       instModalMode = 'edit';
@@ -1654,11 +1779,12 @@
       document.getElementById('inst-f-status').value        = inst.status        || 'pendiente';
       document.getElementById('inst-f-team').value          = inst.team          || 'netTime';
       document.getElementById('inst-modal-err').style.display = 'none';
-      document.getElementById('inst-delete-btn').style.display = 'block';
+      document.getElementById('inst-delete-btn').style.display = canEdit() ? 'block' : 'none';
       document.getElementById('inst-modal').style.display   = 'flex';
     };
 
     window.openNewInstModal = function() {
+      if (!requireAdmin()) return;
       instModalMode = 'create';
       instModalId   = null;
       document.getElementById('inst-modal-title').textContent = 'Nueva instalación';
@@ -1677,6 +1803,7 @@
     };
 
     window.saveInst = async function() {
+      if (!requireAdmin()) return;
       const fields = {
         technician:     document.getElementById('inst-f-technician').value.trim(),
         client:         document.getElementById('inst-f-client').value.trim(),
@@ -1714,6 +1841,7 @@
     };
 
     window.deleteInst = async function() {
+      if (!requireAdmin()) return;
       if (!instModalId) return;
       if (!confirm('¿Eliminar esta instalación?')) return;
       const btn = document.getElementById('inst-delete-btn');
@@ -2092,7 +2220,7 @@
       document.getElementById('hist-list').innerHTML = renderHistList();
     };
 
-    // ── SECCIÓN: TAREAS ────────────────────────────────────────────────
+    // ── SECCIÓN: PLANIFICACIÓN SEMANAL DEL EQUIPO ──────────────────────
     const TASK_STATUS_CYCLE = { pendiente:'en_progreso', en_progreso:'completado', completado:'pendiente' };
     const TASK_STATUS_LABEL = { pendiente:'Pendiente', en_progreso:'En progreso', completado:'Completado', cancelado:'Cancelado' };
     const TASK_STATUS_BG    = { pendiente:'rgba(156,163,175,0.15)', en_progreso:'rgba(59,107,247,0.18)', completado:'rgba(34,197,94,0.15)', cancelado:'rgba(107,114,128,0.10)' };
@@ -2101,119 +2229,340 @@
     const TASK_PRIO_LABEL   = { baja:'Baja', media:'Media', alta:'Alta', urgente:'Urgente' };
     const TASK_PRIO_ORDER   = { urgente:0, alta:1, media:2, baja:3 };
     const TASK_ST_ORDER     = { pendiente:0, en_progreso:1, completado:2, cancelado:3 };
-    const TASK_TEAMS_F      = ['Todos','netTime','SPECManager'];
     const TASK_STATUSES_F   = ['Todos','pendiente','en_progreso','completado','cancelado'];
+    const TASK_VIEWS        = [{id:'tablero',label:'Tablero'},{id:'tabla',label:'Tabla'}];
+
+    // Equipo canónico: define las columnas del tablero. Un miembro sin tareas
+    // igual tiene columna (columna vacía = señal útil en la reunión semanal).
+    const TEAM_MEMBERS = ['Pablo Frisardi', 'Guido Rienzo', 'Marcelo'];
+    // Alias explícitos (clave normalizada → nombre canónico). NO se hace merge
+    // automático por primer token: si mañana entra otro Pablo, se mezclarían.
+    const TASK_ASSIGNEE_ALIAS = { 'pablo': 'Pablo Frisardi' };
+    const UNASSIGNED   = 'Sin asignar';
+    const TASK_COLORS  = ['var(--acc)','var(--acc2)','var(--acc3)','var(--success)','var(--warn)','var(--danger)'];
+
+    // ── Fechas ─────────────────────────────────────────────────────────
+    // due_date es DATE: new Date('2026-09-04') parsea como medianoche UTC y en
+    // AR (UTC-3) retrocede al 03, moviendo la tarea de semana. Siempre mediodía.
+    function dueOf(t)      { return t.due_date ? new Date(t.due_date + 'T12:00:00') : null; }
+    function isOpenTask(t) { return !['completado','cancelado'].includes(t.status); }
+    function weekStartOf(offset = 0) {
+      const d = new Date();
+      d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + offset * 7);
+      d.setHours(0,0,0,0);
+      return d;
+    }
+    function weekEndOf(ws) { const e = new Date(ws); e.setDate(e.getDate()+6); e.setHours(23,59,59,999); return e; }
+    function ymd(d) {
+      return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    }
+    function isoWeekNum(d) {
+      const t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      t.setDate(t.getDate() + 3 - ((t.getDay() + 6) % 7));
+      const week1 = new Date(t.getFullYear(), 0, 4);
+      return 1 + Math.round(((t - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+    }
+    const MONTHS_ABBR = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
+    function weekRangeLabel(ws, we) {
+      const sameYear = ws.getFullYear() === we.getFullYear();
+      if (ws.getMonth() === we.getMonth() && sameYear)
+        return ws.getDate() + ' – ' + we.getDate() + ' ' + MONTHS_ABBR[we.getMonth()] + ' ' + we.getFullYear();
+      const a = ws.getDate() + ' ' + MONTHS_ABBR[ws.getMonth()] + (sameYear ? '' : ' ' + ws.getFullYear());
+      return a + ' – ' + we.getDate() + ' ' + MONTHS_ABBR[we.getMonth()] + ' ' + we.getFullYear();
+    }
+    function weekOffsetLabel(o) {
+      if (o === 0)  return 'ESTA SEMANA';
+      if (o === 1)  return 'PRÓXIMA SEMANA';
+      if (o === -1) return 'SEMANA PASADA';
+      return o > 0 ? 'EN ' + o + ' SEMANAS' : 'HACE ' + Math.abs(o) + ' SEMANAS';
+    }
+    function shortDate(s) {
+      if (!s) return 'S/F';
+      return new Date(s + 'T12:00:00')
+        .toLocaleDateString('es-AR', { weekday:'short', day:'2-digit', month:'2-digit' })
+        .replace('.', '');
+    }
+
+    // ── Responsables: canonicalización, orden y color estables ─────────
+    function normKey(s) {
+      return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g,'')
+        .toLowerCase().replace(/\s+/g,' ').trim();
+    }
+    function canonAssignee(raw) {
+      const k = normKey(raw);
+      if (!k) return UNASSIGNED;
+      if (TASK_ASSIGNEE_ALIAS[k]) return TASK_ASSIGNEE_ALIAS[k];
+      const hit = TEAM_MEMBERS.find(m => normKey(m) === k);
+      return hit || String(raw).trim();   // desconocido: se respeta, nunca se descarta
+    }
+    // Ranking sobre el dataset COMPLETO (mismo criterio que buildGroupColorMap):
+    // así el color y la posición de cada persona no cambian al navegar semanas
+    // ni al filtrar; solo cambia el contenido de su columna.
+    function buildAssigneeOrder(allTasks) {
+      const totals = {};
+      for (const t of allTasks) { const a = canonAssignee(t.assignee); totals[a] = (totals[a]||0)+1; }
+      const ranked = Object.keys(totals)
+        .filter(a => a !== UNASSIGNED)
+        .sort((x,y) => (totals[y]-totals[x]) || x.localeCompare(y));
+      for (const m of TEAM_MEMBERS) if (!ranked.includes(m)) ranked.push(m);
+      if (totals[UNASSIGNED]) ranked.push(UNASSIGNED);
+      return ranked;
+    }
+    function assigneeColor(name, order) {
+      if (name === UNASSIGNED) return 'var(--t3)';
+      const i = order.indexOf(name);
+      return TASK_COLORS[(i < 0 ? 0 : i) % TASK_COLORS.length];
+    }
+    function initialsOf(name) {
+      if (name === UNASSIGNED) return '—';
+      const p = String(name).trim().split(/\s+/);
+      return (((p[0]||'')[0]||'') + ((p[1]||'')[0]||'')).toUpperCase() || '?';
+    }
+    // Escapa para usar dentro de un string JS que a su vez vive en un atributo HTML
+    function jsArg(s) {
+      return esc(String(s == null ? '' : s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
+    }
+
+    // ── Bucketing semanal ──────────────────────────────────────────────
+    // No hay columna de semana: se deriva de due_date. Las tareas abiertas sin
+    // fecha, o vencidas de semanas anteriores, se muestran en la semana actual,
+    // así ninguna tarea abierta queda invisible al navegar.
+    function buildWeekBuckets(tasks, offset) {
+      const ws = weekStartOf(offset), we = weekEndOf(ws);
+      const isCurrent = offset === 0;
+      const inWeek = [], carry = [], noDate = [];
+      for (const t of tasks) {
+        const d = dueOf(t);
+        if (d && d >= ws && d <= we)                        inWeek.push(t);
+        else if (!d && isOpenTask(t) && isCurrent)          noDate.push(t);
+        else if (d && d < ws && isOpenTask(t) && isCurrent) carry.push(t);
+      }
+      // cerradas al fondo, luego prioridad, luego fecha
+      const cmp = (a,b) =>
+        ((TASK_ST_ORDER[a.status] >= 2) - (TASK_ST_ORDER[b.status] >= 2)) ||
+        ((TASK_PRIO_ORDER[a.priority] ?? 2) - (TASK_PRIO_ORDER[b.priority] ?? 2)) ||
+        ((dueOf(a) || 0) - (dueOf(b) || 0));
+      inWeek.sort(cmp); carry.sort(cmp); noDate.sort(cmp);
+      return { ws, we, isCurrent, inWeek, carry, noDate, all: [...inWeek, ...carry, ...noDate] };
+    }
+
+    // ── Render ─────────────────────────────────────────────────────────
+    function statusChipHtml(t) {
+      const next = TASK_STATUS_CYCLE[t.status];
+      const base = `padding:4px 10px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:0.04em;background:${TASK_STATUS_BG[t.status]||'var(--row-b)'};color:${TASK_STATUS_FG[t.status]||'var(--t2)'}`;
+      if (!canEdit() || !next)
+        return `<span style="${base}">${TASK_STATUS_LABEL[t.status]||esc(t.status)}</span>`;
+      return `<button onclick="event.stopPropagation();cycleTaskStatus('${t.id}','${next}')" title="Click para avanzar"
+        style="${base};border:none;cursor:pointer;font-family:inherit;transition:opacity 0.15s"
+        onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">${TASK_STATUS_LABEL[t.status]}</button>`;
+    }
+
+    function taskCard(t, kind) {
+      const prioC   = TASK_PRIO_COLOR[t.priority] || 'var(--t3)';
+      const done    = t.status === 'completado';
+      const overdue = kind === 'carry';
+      return `
+        <div class="glass-sm ch" style="border-radius:10px;padding:9px 10px;border-left:3px solid ${prioC};${done?'opacity:0.58;':''}${overdue?'background:rgba(239,68,68,0.05);':''}${kind==='nodate'?'border-left-style:dashed;':''}${canEdit()?'cursor:pointer;':''}"
+             ${canEdit()?`onclick="openTaskModal('${t.id}')"`:''}>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+            <span style="padding:2px 7px;border-radius:99px;font-size:9px;font-weight:800;letter-spacing:0.05em;background:${prioC}22;color:${prioC}">${TASK_PRIO_LABEL[t.priority]||esc(t.priority)}</span>
+            <span style="margin-left:auto;font-size:9.5px;font-weight:700;font-family:var(--font-mono);color:${overdue?'var(--danger)':'var(--t3)'};white-space:nowrap">${overdue?'⚠ ':''}${shortDate(t.due_date)}</span>
+          </div>
+          <div style="font-size:12.5px;font-weight:600;line-height:1.35;color:${done?'var(--t3)':'var(--t1)'};${done?'text-decoration:line-through;':''}display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${esc(t.title)}</div>
+          ${t.next_step ? `<div style="margin-top:7px;padding:6px 8px;border-radius:7px;background:var(--row-b);border-left:2px solid var(--acc2);font-size:10.5px;line-height:1.4;color:var(--t2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden"><span style="color:var(--acc2);font-weight:700">→</span> ${esc(t.next_step)}</div>` : ''}
+          <div style="display:flex;align-items:center;gap:5px;margin-top:8px">
+            ${statusChipHtml(t)}
+            ${canEdit() ? `<button onclick="event.stopPropagation();deleteTask('${t.id}')" title="Eliminar"
+              style="margin-left:auto;padding:3px 7px;border-radius:6px;border:1px solid var(--b1);background:transparent;color:var(--t3);cursor:pointer;font-size:10px;font-family:inherit;transition:all 0.15s"
+              onmouseover="this.style.borderColor='var(--danger)';this.style.color='var(--danger)'"
+              onmouseout="this.style.borderColor='var(--b1)';this.style.color='var(--t3)'">✕</button>` : ''}
+          </div>
+        </div>`;
+    }
+
+    function colDivider(label, color) {
+      return `<div style="display:flex;align-items:center;gap:7px;margin:4px 0 1px">
+        <span style="font-size:8.5px;font-weight:800;letter-spacing:0.1em;color:${color}">${label}</span>
+        <span style="flex:1;height:1px;background:var(--card-b)"></span>
+      </div>`;
+    }
+
+    function renderTareasTablero(b, order) {
+      const groupsOf = list => {
+        const m = {};
+        for (const t of list) { const a = canonAssignee(t.assignee); (m[a] = m[a] || []).push(t); }
+        return m;
+      };
+      const gWeek = groupsOf(b.inWeek), gCarry = groupsOf(b.carry), gNo = groupsOf(b.noDate);
+      const visible = order.filter(a => TEAM_MEMBERS.includes(a) || gWeek[a] || gCarry[a] || gNo[a]);
+      if (!visible.length)
+        return `<div class="glass" style="border-radius:12px;padding:48px;text-align:center;color:var(--t3);font-size:12px">Sin tareas para esta semana.</div>`;
+
+      // Viernes de la semana visible: precarga sensata al crear desde una columna
+      const defDue = new Date(b.ws); defDue.setDate(defDue.getDate() + 4);
+
+      return `<div style="display:grid;grid-auto-flow:column;grid-auto-columns:minmax(272px,1fr);gap:14px;overflow-x:auto;padding-bottom:10px;align-items:start">
+        ${visible.map(name => {
+          const color  = assigneeColor(name, order);
+          const w = gWeek[name]||[], c = gCarry[name]||[], n = gNo[name]||[];
+          const total  = w.length + c.length + n.length;
+          const done   = w.filter(t => t.status === 'completado').length;
+          const extern = name !== UNASSIGNED && !TEAM_MEMBERS.includes(name);
+          return `
+          <div class="glass" style="border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+            <div style="position:relative;padding:12px 13px;border-bottom:1px solid var(--card-b);display:flex;align-items:center;gap:9px">
+              <div style="position:absolute;top:0;left:0;right:0;height:2.5px;background:linear-gradient(90deg,${color},transparent)"></div>
+              <div style="width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;background:${color}22;color:${color}">${initialsOf(name)}</div>
+              <div style="min-width:0">
+                <div style="font-size:12px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(name)}${extern?` <span title="Responsable fuera del equipo configurado" style="color:var(--warn)">⚠</span>`:''}</div>
+                <div style="font-size:9.5px;color:var(--t3);font-weight:600;margin-top:1px">${total} tarea${total!==1?'s':''}${done?` · ${done} ✓`:''}</div>
+              </div>
+              ${canEdit() ? `<button onclick="openTaskModal(null,'${jsArg(name === UNASSIGNED ? '' : name)}','${ymd(defDue)}')" title="Nueva tarea para ${esc(name)}"
+                style="margin-left:auto;width:24px;height:24px;border-radius:7px;border:1px solid var(--b1);background:transparent;color:var(--t3);cursor:pointer;font-size:15px;line-height:1;font-family:inherit;flex-shrink:0;transition:all 0.15s"
+                onmouseover="this.style.borderColor='var(--acc)';this.style.color='var(--acc)'"
+                onmouseout="this.style.borderColor='var(--b1)';this.style.color='var(--t3)'">+</button>` : ''}
+            </div>
+            <div style="padding:10px;display:flex;flex-direction:column;gap:8px;max-height:62vh;overflow-y:auto">
+              ${w.length ? w.map(t => taskCard(t,'week')).join('')
+                         : `<div style="padding:16px 4px;text-align:center;font-size:10.5px;color:var(--t3)">Sin tareas esta semana</div>`}
+              ${c.length ? colDivider('ARRASTRE','var(--danger)') + c.map(t => taskCard(t,'carry')).join('') : ''}
+              ${n.length ? colDivider('SIN FECHA','var(--t3)')    + n.map(t => taskCard(t,'nodate')).join('') : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    }
+
+    function renderTareasTabla(b) {
+      const rows = sortData(b.all, 'tareas');
+      if (!rows.length)
+        return `<div class="glass" style="border-radius:12px;padding:48px;text-align:center;color:var(--t3);font-size:12px">Sin tareas para esta semana.</div>`;
+      const today = new Date(); today.setHours(0,0,0,0);
+      return `<div class="glass" style="border-radius:12px;overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:880px">
+          <thead><tr style="border-bottom:1px solid var(--b1)">
+            ${sortTh('tareas','title','Tarea')}
+            ${sortTh('tareas','assignee','Responsable')}
+            <th style="text-align:left;padding:10px 16px;font-size:10px;font-weight:700;letter-spacing:0.08em;color:var(--t3)">PRÓXIMO PASO</th>
+            ${sortTh('tareas','priority','Prioridad')}
+            ${sortTh('tareas','status','Estado')}
+            ${sortTh('tareas','due_date','Vence')}
+            ${canEdit() ? '<th></th>' : ''}
+          </tr></thead>
+          <tbody>
+            ${rows.map((t, idx) => {
+              const d       = dueOf(t);
+              const overdue = d && isOpenTask(t) && d < today;
+              const done    = t.status === 'completado';
+              const prioC   = TASK_PRIO_COLOR[t.priority] || 'var(--t3)';
+              return `<tr style="border-bottom:1px solid var(--b1);background:${overdue?'rgba(239,68,68,0.06)':(idx%2?'var(--row-b)':'transparent')};${overdue?'border-left:3px solid var(--danger);':''}">
+                <td style="padding:12px 16px;max-width:280px">
+                  <div style="font-weight:600;color:${done?'var(--t3)':'var(--t1)'};${done?'text-decoration:line-through':''}">${esc(t.title)}</div>
+                  ${t.description?`<div style="font-size:11px;color:var(--t3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px">${esc(t.description)}</div>`:''}
+                </td>
+                <td style="padding:12px 16px;color:var(--acc);font-weight:600;white-space:nowrap">${esc(canonAssignee(t.assignee))}</td>
+                <td style="padding:12px 16px;color:var(--t2);max-width:250px"><span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(t.next_step)||'—'}</span></td>
+                <td style="padding:12px 16px"><span style="padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:0.05em;background:${prioC}22;color:${prioC}">${TASK_PRIO_LABEL[t.priority]||esc(t.priority)}</span></td>
+                <td style="padding:12px 16px">${statusChipHtml(t)}</td>
+                <td style="padding:12px 16px;color:${overdue?'var(--danger)':'var(--t2)'};font-weight:${overdue?'600':'400'};white-space:nowrap">${overdue?'⚠ ':''}${t.due_date?shortDate(t.due_date):'—'}</td>
+                ${canEdit() ? `<td style="padding:12px 16px;white-space:nowrap;text-align:right">
+                  <button onclick="openTaskModal('${t.id}')" style="padding:4px 9px;border-radius:6px;border:1px solid var(--b1);background:transparent;color:var(--t2);cursor:pointer;font-size:11px;font-family:inherit;margin-right:4px;transition:all 0.15s"
+                    onmouseover="this.style.borderColor='var(--acc)';this.style.color='var(--acc)'" onmouseout="this.style.borderColor='var(--b1)';this.style.color='var(--t2)'">Editar</button>
+                  <button onclick="deleteTask('${t.id}')" style="padding:4px 9px;border-radius:6px;border:1px solid var(--b1);background:transparent;color:var(--t3);cursor:pointer;font-size:11px;font-family:inherit;transition:all 0.15s"
+                    onmouseover="this.style.borderColor='var(--danger)';this.style.color='var(--danger)'" onmouseout="this.style.borderColor='var(--b1)';this.style.color='var(--t3)'">✕</button>
+                </td>` : ''}
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    }
 
     function renderTareas() {
-      const today = new Date(); today.setHours(0,0,0,0);
+      const order = buildAssigneeOrder(D.tasks);
 
-      let tasks = D.tasks;
-      if (activeTaskStatus !== 'Todos') tasks = tasks.filter(t => t.status === activeTaskStatus);
+      let base = D.tasks;
+      if (activeTaskStatus   !== 'Todos') base = base.filter(t => t.status === activeTaskStatus);
+      if (activeTaskAssignee !== 'Todos') base = base.filter(t => canonAssignee(t.assignee) === activeTaskAssignee);
 
-      tasks = [...tasks].sort((a,b) => {
-        if (TASK_ST_ORDER[a.status] !== TASK_ST_ORDER[b.status]) return TASK_ST_ORDER[a.status] - TASK_ST_ORDER[b.status];
-        if (a.due_date && b.due_date) return new Date(a.due_date) - new Date(b.due_date);
-        if (a.due_date) return -1; if (b.due_date) return 1;
-        return (TASK_PRIO_ORDER[a.priority]||2) - (TASK_PRIO_ORDER[b.priority]||2);
-      });
+      const b = buildWeekBuckets(base, taskWeekOffset);
+      window._tareasExportData = { rows: b.all, ws: b.ws, we: b.we, order };
 
-      const pendCount    = D.tasks.filter(t => t.status === 'pendiente').length;
-      const inProgCount  = D.tasks.filter(t => t.status === 'en_progreso').length;
-      const overdueCount = D.tasks.filter(t => t.due_date && !['completado','cancelado'].includes(t.status) && new Date(t.due_date) < today).length;
-      const doneCount    = D.tasks.filter(t => t.status === 'completado').length;
+      const inProg = b.inWeek.filter(t => t.status === 'en_progreso').length;
+      const done   = b.inWeek.filter(t => t.status === 'completado').length;
 
       const pillBtn = (label, active, onclick) =>
         `<button onclick="${onclick}" style="padding:5px 12px;border-radius:99px;font-size:11px;font-weight:600;letter-spacing:0.03em;border:1px solid transparent;cursor:pointer;font-family:inherit;transition:all 0.15s;${active ? 'background:rgba(59,107,247,0.22);color:var(--t1);border-color:rgba(59,107,247,0.32)' : 'background:transparent;color:var(--t3)'}">${label}</button>`;
 
+      const stats = [
+        { label:'De la semana', val:b.inWeek.length, icon:svgList,   color:'var(--acc)',     show:true },
+        { label:'En progreso',  val:inProg,          icon:svgWrench, color:'var(--acc2)',    show:true },
+        { label:'Completadas',  val:done,            icon:svgCheck,  color:'var(--success)', show:true },
+        { label:'Arrastre',     val:b.carry.length,  icon:svgAlert,  color:'var(--danger)',  show:b.isCurrent && b.carry.length > 0 },
+        { label:'Sin fecha',    val:b.noDate.length, icon:svgClock,  color:'var(--t3)',      show:b.isCurrent && b.noDate.length > 0 },
+      ].filter(s => s.show);
+
       return `
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
-          <p class="sec-label" style="color:var(--t3);margin:0">TAREAS INTERNAS</p>
-          <button onclick="openTaskModal(null)"
-            style="padding:8px 18px;border-radius:8px;background:var(--acc);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;letter-spacing:0.04em;transition:opacity 0.15s"
-            onmouseover="this.style.opacity='0.82'" onmouseout="this.style.opacity='1'">+ Nueva Tarea</button>
-        </div>
-
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
-          ${[
-            { label:'Pendientes',  val:pendCount,    icon:svgBlock,  color:'var(--t2)' },
-            { label:'En progreso', val:inProgCount,  icon:svgWrench, color:'var(--acc)' },
-            { label:'Vencidas',    val:overdueCount, icon:svgAlert,  color:'var(--danger)' },
-            { label:'Completadas', val:doneCount,    icon:svgCheck,  color:'var(--success)' },
-          ].map(s => `
-            <div class="glass" style="border-radius:10px;padding:10px 18px;display:flex;align-items:center;gap:10px;position:relative;overflow:hidden;min-width:140px">
-              <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,${s.color},transparent)"></div>
-              <div style="width:26px;height:26px;border-radius:7px;background:${s.color}22;display:flex;align-items:center;justify-content:center;color:${s.color};flex-shrink:0">${s.icon}</div>
-              <div>
-                <div style="font-size:20px;font-weight:800;color:var(--t1);line-height:1;letter-spacing:-0.02em">${s.val}</div>
-                <div style="font-size:10px;color:var(--t3);margin-top:2px;font-weight:600;letter-spacing:0.04em">${s.label}</div>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
-          <div style="display:flex;gap:4px;padding:3px;border-radius:99px;background:var(--row-b);border:1px solid var(--pill-br)">
-            ${TASK_STATUSES_F.map(s => pillBtn(s==='Todos'?'Todos':TASK_STATUS_LABEL[s], activeTaskStatus===s, `setTaskStatusFilter('${s}')`)).join('')}
+          <p class="sec-label" style="color:var(--t3);margin:0">PLANIFICACIÓN DEL EQUIPO</p>
+          <div style="display:flex;align-items:center;gap:6px">
+            <button onclick="exportTareasCSV()" title="Exportar a CSV / Excel" style="display:flex;align-items:center;gap:5px;padding:5px 11px;border-radius:8px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(16,185,129,0.18)'" onmouseout="this.style.background='rgba(16,185,129,0.08)'">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV
+            </button>
+            <button onclick="exportTareasPDF()" title="Exportar a PDF / Imprimir" style="display:flex;align-items:center;gap:5px;padding:5px 11px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:#FCA5A5;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(239,68,68,0.18)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>PDF
+            </button>
+            ${canEdit() ? `<button onclick="openTaskModal(null)"
+              style="margin-left:6px;padding:8px 18px;border-radius:8px;background:var(--acc);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;letter-spacing:0.04em;transition:opacity 0.15s"
+              onmouseover="this.style.opacity='0.82'" onmouseout="this.style.opacity='1'">+ Nueva Tarea</button>` : ''}
           </div>
         </div>
 
-        ${tasks.length === 0
-          ? `<div class="glass" style="border-radius:12px;padding:48px;text-align:center;color:var(--t3);font-size:12px">Sin tareas${activeTaskStatus!=='Todos'?' con los filtros aplicados':''}. Creá una con el botón de arriba.</div>`
-          : `<div class="glass" style="border-radius:12px;overflow:hidden">
-          <table style="width:100%;border-collapse:collapse;font-size:12px">
-            <thead><tr style="border-bottom:1px solid var(--b1)">
-              ${['TAREA','RESPONSABLE','PRIORIDAD','ESTADO','VENCE',''].map(h =>
-                `<th style="padding:10px 16px;text-align:left;font-size:10px;font-weight:600;letter-spacing:0.07em;color:var(--t3)">${h}</th>`).join('')}
-            </tr></thead>
-            <tbody>
-              ${tasks.map((task, idx) => {
-                const overdue  = task.due_date && !['completado','cancelado'].includes(task.status) && new Date(task.due_date) < today;
-                const done     = task.status === 'completado';
-                const rowBg    = overdue ? 'rgba(239,68,68,0.06)' : (idx%2===0 ? 'transparent' : 'var(--row-b)');
-                const borderL  = overdue ? 'border-left:3px solid var(--danger);' : '';
-                const next     = TASK_STATUS_CYCLE[task.status];
-                const dueStr   = task.due_date ? new Date(task.due_date+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
-                const prioC    = TASK_PRIO_COLOR[task.priority]||'var(--t3)';
-                return `<tr style="border-bottom:1px solid var(--b1);background:${rowBg};${borderL}">
-                  <td style="padding:12px 16px;max-width:300px">
-                    <div style="font-weight:600;color:${done?'var(--t3)':'var(--t1)'};${done?'text-decoration:line-through':''}">${esc(task.title)}</div>
-                    ${task.description?`<div style="font-size:11px;color:var(--t3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px">${esc(task.description)}</div>`:''}
-                  </td>
-                  <td style="padding:12px 16px;color:${task.assignee?'var(--acc)':'var(--t3)'};font-weight:${task.assignee?'600':'400'}">${esc(task.assignee||'—')}</td>
-                  <td style="padding:12px 16px">
-                    <span style="padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:0.05em;background:${prioC}22;color:${prioC}">
-                      ${TASK_PRIO_LABEL[task.priority]||esc(task.priority)}
-                    </span>
-                  </td>
-                  <td style="padding:12px 16px">
-                    ${next
-                      ? `<button onclick="cycleTaskStatus('${task.id}','${next}')" title="Click para avanzar"
-                          style="padding:4px 10px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:0.04em;border:none;cursor:pointer;font-family:inherit;background:${TASK_STATUS_BG[task.status]||'var(--row-b)'};color:${TASK_STATUS_FG[task.status]||'var(--t2)'};transition:opacity 0.15s"
-                          onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">
-                          ${TASK_STATUS_LABEL[task.status]}
-                        </button>`
-                      : `<span style="padding:4px 10px;border-radius:99px;font-size:10px;font-weight:700;background:${TASK_STATUS_BG[task.status]||'var(--row-b)'};color:${TASK_STATUS_FG[task.status]||'var(--t3)'}">
-                          ${TASK_STATUS_LABEL[task.status]||esc(task.status)}
-                        </span>`}
-                  </td>
-                  <td style="padding:12px 16px;color:${overdue?'var(--danger)':'var(--t2)'};font-weight:${overdue?'600':'400'};white-space:nowrap">
-                    ${overdue?'⚠ ':''}${dueStr}
-                  </td>
-                  <td style="padding:12px 16px;white-space:nowrap;text-align:right">
-                    <button onclick="openTaskModal('${task.id}')"
-                      style="padding:4px 9px;border-radius:6px;border:1px solid var(--b1);background:transparent;color:var(--t2);cursor:pointer;font-size:11px;font-family:inherit;margin-right:4px;transition:all 0.15s"
-                      onmouseover="this.style.borderColor='var(--acc)';this.style.color='var(--acc)'" onmouseout="this.style.borderColor='var(--b1)';this.style.color='var(--t2)'">Editar</button>
-                    <button onclick="deleteTask('${task.id}')"
-                      style="padding:4px 9px;border-radius:6px;border:1px solid var(--b1);background:transparent;color:var(--t3);cursor:pointer;font-size:11px;font-family:inherit;transition:all 0.15s"
-                      onmouseover="this.style.borderColor='var(--danger)';this.style.color='var(--danger)'" onmouseout="this.style.borderColor='var(--b1)';this.style.color='var(--t3)'">✕</button>
-                  </td>
-                </tr>`;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>`}
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px">
+          <div class="glass-sm" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:12px">
+            <button onclick="shiftTaskWeek(-1)" title="Semana anterior" style="width:28px;height:28px;border-radius:8px;border:1px solid var(--b1);background:transparent;color:var(--t2);cursor:pointer;font-size:15px;line-height:1;font-family:inherit;transition:all 0.15s" onmouseover="this.style.borderColor='var(--acc)';this.style.color='var(--acc)'" onmouseout="this.style.borderColor='var(--b1)';this.style.color='var(--t2)'">‹</button>
+            <div style="min-width:196px;text-align:center">
+              <div style="font-size:12px;font-weight:700;color:var(--t1);letter-spacing:0.02em">${weekRangeLabel(b.ws, b.we)}</div>
+              <div style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:${b.isCurrent?'var(--acc)':'var(--t3)'};margin-top:2px">SEMANA ${isoWeekNum(b.ws)} · ${weekOffsetLabel(taskWeekOffset)}</div>
+            </div>
+            <button onclick="shiftTaskWeek(1)" title="Semana siguiente" style="width:28px;height:28px;border-radius:8px;border:1px solid var(--b1);background:transparent;color:var(--t2);cursor:pointer;font-size:15px;line-height:1;font-family:inherit;transition:all 0.15s" onmouseover="this.style.borderColor='var(--acc)';this.style.color='var(--acc)'" onmouseout="this.style.borderColor='var(--b1)';this.style.color='var(--t2)'">›</button>
+            ${taskWeekOffset !== 0 ? `<button onclick="goTaskWeek(0)" style="margin-left:2px;padding:5px 12px;border-radius:8px;border:1px solid rgba(59,107,247,0.32);background:rgba(59,107,247,0.14);color:#93C5FD;cursor:pointer;font-size:11px;font-weight:700;font-family:inherit">Hoy</button>` : ''}
+          </div>
 
-        <!-- Modal nueva/editar tarea -->
+          ${stats.map(s => `
+            <div class="glass" style="border-radius:10px;padding:9px 16px;display:flex;align-items:center;gap:10px;position:relative;overflow:hidden;min-width:132px">
+              <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,${s.color},transparent)"></div>
+              <div style="width:26px;height:26px;border-radius:7px;background:${s.color}22;display:flex;align-items:center;justify-content:center;color:${s.color};flex-shrink:0">${s.icon}</div>
+              <div>
+                <div style="font-size:19px;font-weight:800;color:var(--t1);line-height:1;letter-spacing:-0.02em">${s.val}</div>
+                <div style="font-size:10px;color:var(--t3);margin-top:2px;font-weight:600;letter-spacing:0.04em">${s.label}</div>
+              </div>
+            </div>`).join('')}
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;align-items:center">
+          <div style="display:flex;gap:4px;padding:3px;border-radius:99px;background:var(--row-b);border:1px solid var(--pill-br)">
+            ${TASK_VIEWS.map(v => pillBtn(v.label, taskView===v.id, `setTaskView('${v.id}')`)).join('')}
+          </div>
+          <div style="display:flex;gap:4px;padding:3px;border-radius:99px;background:var(--row-b);border:1px solid var(--pill-br)">
+            ${TASK_STATUSES_F.map(st => pillBtn(st==='Todos'?'Todos':TASK_STATUS_LABEL[st], activeTaskStatus===st, `setTaskStatusFilter('${st}')`)).join('')}
+          </div>
+          <div style="display:flex;gap:4px;padding:3px;border-radius:99px;background:var(--row-b);border:1px solid var(--pill-br);flex-wrap:wrap">
+            ${['Todos', ...order].map(a => pillBtn(a==='Todos'?'Todos':esc(a), activeTaskAssignee===a, `setTaskAssigneeFilter('${jsArg(a)}')`)).join('')}
+          </div>
+          <span style="font-size:11px;color:var(--t3)">${b.all.length} en vista · ${D.tasks.length} total</span>
+        </div>
+
+        ${taskView === 'tablero' ? renderTareasTablero(b, order) : renderTareasTabla(b)}
+        ${canEdit() ? taskModalHtml() : ''}
+      `;
+    }
+
+    function taskModalHtml() {
+      const fieldCss  = 'width:100%;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--t1);background:var(--row-b);border:1px solid var(--b1);font-family:inherit;box-sizing:border-box;outline:none;transition:border-color 0.15s';
+      const selectCss = fieldCss.replace('background:var(--row-b)', 'background:var(--s1)');
+      const labelCss  = 'display:block;font-size:10px;font-weight:700;color:var(--t3);letter-spacing:0.08em;margin-bottom:6px';
+      return `
         <div id="task-modal" onclick="if(event.target===this)closeTaskModal()"
           style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);z-index:1000;align-items:center;justify-content:center;padding:20px">
           <div class="glass" style="border-radius:16px;padding:32px;width:100%;max-width:540px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">
@@ -2221,46 +2570,44 @@
             <input type="hidden" id="task-id-input">
             <div style="display:flex;flex-direction:column;gap:16px">
               <div>
-                <label style="display:block;font-size:10px;font-weight:700;color:var(--t3);letter-spacing:0.08em;margin-bottom:6px">TÍTULO *</label>
-                <input id="task-title-input" type="text" placeholder="Descripción de la tarea…"
-                  style="width:100%;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--t1);background:var(--row-b);border:1px solid var(--b1);font-family:inherit;box-sizing:border-box;transition:border-color 0.15s;outline:none"
+                <label style="${labelCss}">TÍTULO *</label>
+                <input id="task-title-input" type="text" placeholder="Descripción de la tarea…" style="${fieldCss}"
                   onfocus="this.style.borderColor='rgba(59,107,247,0.5)'" onblur="this.style.borderColor=''">
               </div>
               <div>
-                <label style="display:block;font-size:10px;font-weight:700;color:var(--t3);letter-spacing:0.08em;margin-bottom:6px">DESCRIPCIÓN</label>
-                <textarea id="task-desc-input" placeholder="Detalles adicionales…" rows="3"
-                  style="width:100%;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--t1);background:var(--row-b);border:1px solid var(--b1);font-family:inherit;box-sizing:border-box;resize:vertical;outline:none;transition:border-color 0.15s"
+                <label style="${labelCss}">PRÓXIMO PASO</label>
+                <textarea id="task-next-input" placeholder="Qué sigue…" rows="2" style="${fieldCss};resize:vertical"
                   onfocus="this.style.borderColor='rgba(59,107,247,0.5)'" onblur="this.style.borderColor=''"></textarea>
               </div>
               <div>
-                <label style="display:block;font-size:10px;font-weight:700;color:var(--t3);letter-spacing:0.08em;margin-bottom:6px">RESPONSABLE</label>
-                <input id="task-assignee-input" type="text" placeholder="Nombre…"
-                  style="width:100%;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--t1);background:var(--row-b);border:1px solid var(--b1);font-family:inherit;box-sizing:border-box;outline:none;transition:border-color 0.15s"
+                <label style="${labelCss}">DESCRIPCIÓN</label>
+                <textarea id="task-desc-input" placeholder="Detalles adicionales…" rows="3" style="${fieldCss};resize:vertical"
+                  onfocus="this.style.borderColor='rgba(59,107,247,0.5)'" onblur="this.style.borderColor=''"></textarea>
+              </div>
+              <div>
+                <label style="${labelCss}">RESPONSABLE</label>
+                <input id="task-assignee-input" type="text" list="task-assignee-list" placeholder="Nombre…" style="${fieldCss}"
                   onfocus="this.style.borderColor='rgba(59,107,247,0.5)'" onblur="this.style.borderColor=''">
+                <datalist id="task-assignee-list">
+                  ${TEAM_MEMBERS.map(m => `<option value="${esc(m)}"></option>`).join('')}
+                </datalist>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
                 <div>
-                  <label style="display:block;font-size:10px;font-weight:700;color:var(--t3);letter-spacing:0.08em;margin-bottom:6px">PRIORIDAD</label>
-                  <select id="task-prio-input" style="width:100%;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--t1);background:var(--s1);border:1px solid var(--b1);font-family:inherit;box-sizing:border-box;outline:none">
-                    <option value="baja">Baja</option>
-                    <option value="media">Media</option>
-                    <option value="alta">Alta</option>
-                    <option value="urgente">Urgente</option>
+                  <label style="${labelCss}">PRIORIDAD</label>
+                  <select id="task-prio-input" style="${selectCss}">
+                    ${['baja','media','alta','urgente'].map(p => `<option value="${p}">${TASK_PRIO_LABEL[p]}</option>`).join('')}
                   </select>
                 </div>
                 <div>
-                  <label style="display:block;font-size:10px;font-weight:700;color:var(--t3);letter-spacing:0.08em;margin-bottom:6px">ESTADO</label>
-                  <select id="task-status-input" style="width:100%;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--t1);background:var(--s1);border:1px solid var(--b1);font-family:inherit;box-sizing:border-box;outline:none">
-                    <option value="pendiente">Pendiente</option>
-                    <option value="en_progreso">En progreso</option>
-                    <option value="completado">Completado</option>
-                    <option value="cancelado">Cancelado</option>
+                  <label style="${labelCss}">ESTADO</label>
+                  <select id="task-status-input" style="${selectCss}">
+                    ${['pendiente','en_progreso','completado','cancelado'].map(st => `<option value="${st}">${TASK_STATUS_LABEL[st]}</option>`).join('')}
                   </select>
                 </div>
                 <div>
-                  <label style="display:block;font-size:10px;font-weight:700;color:var(--t3);letter-spacing:0.08em;margin-bottom:6px">VENCE</label>
-                  <input id="task-due-input" type="date"
-                    style="width:100%;border-radius:8px;padding:9px 12px;font-size:13px;color:var(--t1);background:var(--s1);border:1px solid var(--b1);font-family:inherit;box-sizing:border-box;outline:none;transition:border-color 0.15s"
+                  <label style="${labelCss}">VENCE</label>
+                  <input id="task-due-input" type="date" style="${selectCss}"
                     onfocus="this.style.borderColor='rgba(59,107,247,0.5)'" onblur="this.style.borderColor=''">
                 </div>
               </div>
@@ -2268,44 +2615,34 @@
             <div id="task-modal-error" style="display:none;margin-top:12px;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,0.12);color:#FCA5A5;font-size:12px"></div>
             <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:24px">
               <button onclick="closeTaskModal()"
-                style="padding:9px 20px;border-radius:8px;border:1px solid var(--b1);background:transparent;color:var(--t2);cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:all 0.15s">
-                Cancelar
-              </button>
+                style="padding:9px 20px;border-radius:8px;border:1px solid var(--b1);background:transparent;color:var(--t2);cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:all 0.15s">Cancelar</button>
               <button id="task-submit-btn" onclick="submitTask()"
-                style="padding:9px 20px;border-radius:8px;border:none;background:var(--acc);color:#fff;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:opacity 0.15s">
-                Guardar
-              </button>
+                style="padding:9px 20px;border-radius:8px;border:none;background:var(--acc);color:#fff;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;transition:opacity 0.15s">Guardar</button>
             </div>
           </div>
-        </div>
-      `;
+        </div>`;
     }
 
-    window.openTaskModal = function(id) {
+    // ── Handlers ───────────────────────────────────────────────────────
+    // Doble capa: la UI omite los controles si !canEdit(), y cada handler
+    // guardea igual por si alguien los llama desde la consola. El enforcement
+    // real es RLS — esto solo evita errores crudos de Supabase en pantalla.
+    window.openTaskModal = function(id, presetAssignee = '', presetDue = '') {
+      if (!requireAdmin()) return;
       const modal = document.getElementById('task-modal');
       if (!modal) return;
       const isEdit = !!id;
       document.getElementById('task-modal-title').textContent = isEdit ? 'Editar Tarea' : 'Nueva Tarea';
       document.getElementById('task-id-input').value = id || '';
       document.getElementById('task-modal-error').style.display = 'none';
-      if (isEdit) {
-        const task = D.tasks.find(t => t.id === id);
-        if (task) {
-          document.getElementById('task-title-input').value    = task.title || '';
-          document.getElementById('task-desc-input').value     = task.description || '';
-          document.getElementById('task-assignee-input').value = task.assignee || '';
-          document.getElementById('task-prio-input').value     = task.priority || 'media';
-          document.getElementById('task-status-input').value   = task.status || 'pendiente';
-          document.getElementById('task-due-input').value      = task.due_date || '';
-        }
-      } else {
-        document.getElementById('task-title-input').value    = '';
-        document.getElementById('task-desc-input').value     = '';
-        document.getElementById('task-assignee-input').value = '';
-        document.getElementById('task-prio-input').value     = 'media';
-        document.getElementById('task-status-input').value   = 'pendiente';
-        document.getElementById('task-due-input').value      = '';
-      }
+      const t = isEdit ? D.tasks.find(x => x.id === id) : null;
+      document.getElementById('task-title-input').value    = t?.title       || '';
+      document.getElementById('task-next-input').value     = t?.next_step   || '';
+      document.getElementById('task-desc-input').value     = t?.description || '';
+      document.getElementById('task-assignee-input').value = t ? (t.assignee || '') : presetAssignee;
+      document.getElementById('task-prio-input').value     = t?.priority    || 'media';
+      document.getElementById('task-status-input').value   = t?.status      || 'pendiente';
+      document.getElementById('task-due-input').value      = t ? (t.due_date || '') : presetDue;
       modal.style.display = 'flex';
       setTimeout(() => document.getElementById('task-title-input')?.focus(), 60);
     };
@@ -2316,22 +2653,21 @@
     };
 
     window.submitTask = async function() {
-      const title = document.getElementById('task-title-input').value.trim();
-      const errEl = document.getElementById('task-modal-error');
-      if (!title) {
-        errEl.textContent = 'El título es obligatorio.';
-        errEl.style.display = 'block';
-        return;
-      }
+      if (!requireAdmin()) return;
+      const title  = document.getElementById('task-title-input').value.trim();
+      const errEl  = document.getElementById('task-modal-error');
+      if (!title) { errEl.textContent = 'El título es obligatorio.'; errEl.style.display = 'block'; return; }
       errEl.style.display = 'none';
       const id  = document.getElementById('task-id-input').value;
       const btn = document.getElementById('task-submit-btn');
       btn.textContent = 'Guardando…'; btn.disabled = true;
 
+      const rawAssignee = document.getElementById('task-assignee-input').value.trim();
       const payload = {
         title,
+        next_step:   document.getElementById('task-next-input').value.trim() || null,
         description: document.getElementById('task-desc-input').value.trim() || null,
-        assignee:    document.getElementById('task-assignee-input').value.trim() || null,
+        assignee:    rawAssignee ? canonAssignee(rawAssignee) : null,
         priority:    document.getElementById('task-prio-input').value,
         status:      document.getElementById('task-status-input').value,
         due_date:    document.getElementById('task-due-input').value || null,
@@ -2348,23 +2684,117 @@
         btn.textContent = 'Guardar'; btn.disabled = false;
         return;
       }
+      btn.textContent = 'Guardar'; btn.disabled = false;
       closeTaskModal();
       await loadAll();
     };
 
     window.cycleTaskStatus = async function(id, nextStatus) {
-      await sb.from('tasks').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', id);
+      if (!requireAdmin()) return;
+      const { error } = await sb.from('tasks')
+        .update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', id);
+      if (error) { showError(error.message); return; }
       await loadAll();
     };
 
     window.deleteTask = async function(id) {
+      if (!requireAdmin()) return;
       if (!confirm('¿Eliminar esta tarea?')) return;
-      await sb.from('tasks').delete().eq('id', id);
+      const { error } = await sb.from('tasks').delete().eq('id', id);
+      if (error) { showError(error.message); return; }
       await loadAll();
     };
 
-    window.setTaskStatusFilter = function(s) { activeTaskStatus = s; render(); };
-    window.setTaskTeamFilter   = function(t) { activeTaskTeam   = t; render(); };
+    window.setTaskStatusFilter   = function(s) { activeTaskStatus   = s; render(); };
+    window.setTaskAssigneeFilter = function(a) { activeTaskAssignee = a; render(); };
+    window.shiftTaskWeek         = function(d) { taskWeekOffset    += d; render(); };
+    window.goTaskWeek            = function(o) { taskWeekOffset     = o; render(); };
+    window.setTaskView           = function(v) {
+      taskView = v;
+      localStorage.setItem('spec-task-view', v);
+      render();
+    };
+
+    // ── Export ─────────────────────────────────────────────────────────
+    function tareasExportRows() {
+      const d = window._tareasExportData || { rows: [], ws: new Date(), we: new Date(), order: [] };
+      const today = new Date(); today.setHours(0,0,0,0);
+      return d.rows.map(t => {
+        const due = dueOf(t);
+        const origen = !t.due_date ? 'Sin fecha' : (due < d.ws && isOpenTask(t) ? 'Arrastre' : 'De la semana');
+        return {
+          responsable: canonAssignee(t.assignee),
+          title: t.title || '',
+          next_step: t.next_step || '',
+          priority: TASK_PRIO_LABEL[t.priority] || t.priority || '',
+          status: TASK_STATUS_LABEL[t.status] || t.status || '',
+          due: t.due_date ? t.due_date.split('-').reverse().join('/') : '',
+          origen,
+        };
+      });
+    }
+
+    window.exportTareasCSV = function() {
+      const d    = window._tareasExportData || { ws:new Date(), we:new Date() };
+      const rows = tareasExportRows();
+      const headers = ['Responsable','Tarea','Próximo Paso','Prioridad','Estado','Vence','Origen'];
+      const csv = [headers, ...rows.map(r => [r.responsable, r.title, r.next_step, r.priority, r.status, r.due, r.origen])]
+        .map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))
+        .join('\n');
+      const blob = new Blob(['﻿' + csv], { type:'text/csv;charset=utf-8;' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url;
+      a.download = `tareas_semana_${ymd(d.ws)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
+    window.exportTareasPDF = function() {
+      const d    = window._tareasExportData || { ws:new Date(), we:new Date(), order:[] };
+      const rows = tareasExportRows();
+      const escP = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      // Agrupado por responsable: el PDF impreso refleja el tablero, no una tabla plana
+      const byPerson = {};
+      for (const r of rows) (byPerson[r.responsable] = byPerson[r.responsable] || []).push(r);
+      const people = (d.order || []).filter(p => byPerson[p]).concat(
+        Object.keys(byPerson).filter(p => !(d.order||[]).includes(p)));
+      const blocks = people.map(p => `
+        <h3>${escP(p)} <span class="cnt">${byPerson[p].length} tarea${byPerson[p].length!==1?'s':''}</span></h3>
+        <table>
+          <colgroup><col style="width:30%"><col style="width:30%"><col style="width:11%"><col style="width:13%"><col style="width:16%"></colgroup>
+          <thead><tr><th>Tarea</th><th>Próximo paso</th><th>Prioridad</th><th>Estado</th><th>Vence</th></tr></thead>
+          <tbody>${byPerson[p].map(r => `<tr>
+            <td>${escP(r.title)}</td><td>${escP(r.next_step)}</td>
+            <td>${escP(r.priority)}</td><td>${escP(r.status)}</td>
+            <td>${escP(r.due)}${r.origen==='Arrastre'?' ⚠':''}${r.origen==='Sin fecha'?'—':''}</td>
+          </tr>`).join('')}</tbody>
+        </table>`).join('');
+      const win = window.open('', '_blank');
+      win.document.write(`<!DOCTYPE html><html lang="es"><head>
+        <meta charset="UTF-8">
+        <title>Planificación del equipo — ${weekRangeLabel(d.ws, d.we)}</title>
+        <style>
+          body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#111;margin:20px}
+          h2{font-size:15px;margin-bottom:3px}
+          h3{font-size:12px;margin:16px 0 5px;padding-bottom:3px;border-bottom:1.5px solid #1e2235}
+          h3 .cnt{font-weight:400;color:#666;font-size:10px}
+          p.meta{font-size:10px;color:#666;margin-bottom:14px}
+          table{width:100%;border-collapse:collapse;table-layout:fixed}
+          th{background:#1e2235;color:#fff;padding:5px 7px;text-align:left;font-size:9.5px;letter-spacing:0.04em;font-weight:700}
+          td{padding:5px 7px;border-bottom:1px solid #e5e7eb;vertical-align:top;word-break:break-word}
+          tr:nth-child(even) td{background:#f9fafb}
+          @page{margin:15mm}
+          @media print{body{margin:0} h3{page-break-after:avoid}}
+        </style>
+      </head><body>
+        <h2>Planificación del equipo — Grupo SPEC</h2>
+        <p class="meta">Semana ${isoWeekNum(d.ws)} · ${weekRangeLabel(d.ws, d.we)} &nbsp;·&nbsp; Exportado: ${new Date().toLocaleString('es-AR')} &nbsp;·&nbsp; ${rows.length} tarea${rows.length!==1?'s':''}</p>
+        ${blocks || '<p>Sin tareas para esta semana.</p>'}
+        <script>window.onload=()=>window.print();<\/script>
+      </body></html>`);
+      win.document.close();
+    };
 
     // ── SECCIÓN: ACTIVIDADES EQUIPO ─────────────────────────────────────
     const ACT_PERIODS = [
@@ -2729,15 +3159,38 @@
     };
 
     // ── BOOTSTRAP ──────────────────────────────────────────────────────
+    // subscribeRealtime() va DESPUÉS de setAuth: Realtime evalúa RLS con el token
+    // que tenga el socket al suscribirse. Con el token anon los canales quedan
+    // suscriptos (dot en verde) pero no llega ningún evento — falla silenciosa.
+    async function startApp() {
+      updateNavTabs();
+      buildInstModal();
+      await loadAll(true);
+      try { await sb.realtime.setAuth(session.access_token); } catch (_) {}
+      subscribeRealtime();
+    }
+
     if (localStorage.getItem('spec-theme') === 'light') {
       isLightMode = true;
       document.body.classList.add('light');
     }
-    updateNavTabs();
     updateThemeBtn();
-    buildInstModal();
-    await loadAll(true);
-    subscribeRealtime();
+
+    sb.auth.onAuthStateChange((event, s) => {
+      if (event === 'SIGNED_OUT') { location.reload(); return; }
+      if (s) session = s;                 // TOKEN_REFRESHED: mantener el token fresco
+    });
+
+    const { data: { session: s0 } } = await sb.auth.getSession();
+    if (s0) {
+      session = s0;
+      await loadProfile();
+      document.body.classList.add('authed');
+      renderUserChip();
+      await startApp();
+    } else {
+      setTimeout(() => document.getElementById('auth-email')?.focus(), 60);
+    }
   </script>
 </body>
 </html>
