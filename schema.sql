@@ -316,53 +316,83 @@ CREATE POLICY "profiles self select" ON public.profiles
 
 
 -- ============================================================
--- AUTH Y ROLES — PARTE 2 (RLS RESTRICTIVA)   ⚠️ NO aplicada aún
+-- AUTH Y ROLES — PARTE 2 (RLS RESTRICTIVA)   ✅ aplicada 2026-09-03
 -- ============================================================
--- ORDEN OBLIGATORIO: correr esto SOLO cuando (a) existan los usuarios en
--- Supabase Auth, (b) esté OFF el registro público, y (c) el frontend con
--- login ya esté publicado y verificado. Antes de eso, deja el sitio sin datos.
---
 -- Se usa DROP + CREATE (no el patrón DO $$ ... duplicate_object del resto del
 -- archivo) porque acá hay que REEMPLAZAR: las policies son OR-aditivas y una
--- sola policy permisiva sobrante anularía todo el hardening.
+-- sola policy permisiva sobrante anularía todo el hardening. Idempotente:
+-- correr de nuevo (ej. al re-ejecutar schema.sql completo) es seguro.
 --
--- Los syncs de n8n NO se ven afectados: usan service_role, que bypassea RLS.
+-- Verificado en vivo: anon SELECT -> [], anon INSERT -> 42501 (RLS). Los
+-- syncs de n8n (service_role) no se ven afectados: bypassean RLS por diseño.
 -- ============================================================
---
+
+BEGIN;
+
+-- Lectura: de público a solo autenticados
+DROP POLICY IF EXISTS "lectura publica" ON public.projects;
+CREATE POLICY "read authenticated" ON public.projects        FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "lectura publica" ON public.tickets;
+CREATE POLICY "read authenticated" ON public.tickets         FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "lectura publica" ON public.orders;
+CREATE POLICY "read authenticated" ON public.orders          FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "lectura publica" ON public.status_log;
+CREATE POLICY "read authenticated" ON public.status_log      FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "lectura publica" ON public.team_activities;
+CREATE POLICY "read authenticated" ON public.team_activities FOR SELECT TO authenticated USING (true);
+
+-- Installations: lectura autenticada, escritura solo admin
+DROP POLICY IF EXISTS "lectura publica"           ON public.installations;
+DROP POLICY IF EXISTS "anon insert installations" ON public.installations;
+DROP POLICY IF EXISTS "anon update installations" ON public.installations;
+DROP POLICY IF EXISTS "anon delete installations" ON public.installations;
+CREATE POLICY "read authenticated" ON public.installations FOR SELECT TO authenticated USING (true);
+CREATE POLICY "admin insert"       ON public.installations FOR INSERT TO authenticated WITH CHECK (public.is_admin());
+CREATE POLICY "admin update"       ON public.installations FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+CREATE POLICY "admin delete"       ON public.installations FOR DELETE TO authenticated USING (public.is_admin());
+
+-- Tasks: idem
+DROP POLICY IF EXISTS "lectura publica"       ON public.tasks;
+DROP POLICY IF EXISTS "escritura interna"     ON public.tasks;
+DROP POLICY IF EXISTS "actualizacion interna" ON public.tasks;
+DROP POLICY IF EXISTS "eliminacion interna"   ON public.tasks;
+CREATE POLICY "read authenticated" ON public.tasks FOR SELECT TO authenticated USING (true);
+CREATE POLICY "admin insert"       ON public.tasks FOR INSERT TO authenticated WITH CHECK (public.is_admin());
+CREATE POLICY "admin update"       ON public.tasks FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+CREATE POLICY "admin delete"       ON public.tasks FOR DELETE TO authenticated USING (public.is_admin());
+
+COMMIT;
+
+
+-- ============================================================
+-- ROLLBACK de la Parte 2 (revertir a lectura/escritura pública). Solo para
+-- una emergencia deliberada — NO ejecutar por rutina.
+-- ============================================================
 -- BEGIN;
---
--- -- Lectura: de público a solo autenticados
--- DROP POLICY IF EXISTS "lectura publica" ON public.projects;
--- CREATE POLICY "read authenticated" ON public.projects        FOR SELECT TO authenticated USING (true);
--- DROP POLICY IF EXISTS "lectura publica" ON public.tickets;
--- CREATE POLICY "read authenticated" ON public.tickets         FOR SELECT TO authenticated USING (true);
--- DROP POLICY IF EXISTS "lectura publica" ON public.orders;
--- CREATE POLICY "read authenticated" ON public.orders          FOR SELECT TO authenticated USING (true);
--- DROP POLICY IF EXISTS "lectura publica" ON public.status_log;
--- CREATE POLICY "read authenticated" ON public.status_log      FOR SELECT TO authenticated USING (true);
--- DROP POLICY IF EXISTS "lectura publica" ON public.team_activities;
--- CREATE POLICY "read authenticated" ON public.team_activities FOR SELECT TO authenticated USING (true);
---
--- -- Installations: lectura autenticada, escritura solo admin
--- DROP POLICY IF EXISTS "lectura publica"           ON public.installations;
--- DROP POLICY IF EXISTS "anon insert installations" ON public.installations;
--- DROP POLICY IF EXISTS "anon update installations" ON public.installations;
--- DROP POLICY IF EXISTS "anon delete installations" ON public.installations;
--- CREATE POLICY "read authenticated" ON public.installations FOR SELECT TO authenticated USING (true);
--- CREATE POLICY "admin insert"       ON public.installations FOR INSERT TO authenticated WITH CHECK (public.is_admin());
--- CREATE POLICY "admin update"       ON public.installations FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
--- CREATE POLICY "admin delete"       ON public.installations FOR DELETE TO authenticated USING (public.is_admin());
---
--- -- Tasks: idem. OJO, las policies viejas son TO public (no TO anon), o sea que
--- -- hoy cualquier usuario authenticated hereda escritura completa — ese es
--- -- exactamente el bug que rompería el acceso de solo lectura.
--- DROP POLICY IF EXISTS "lectura publica"       ON public.tasks;
--- DROP POLICY IF EXISTS "escritura interna"     ON public.tasks;
--- DROP POLICY IF EXISTS "actualizacion interna" ON public.tasks;
--- DROP POLICY IF EXISTS "eliminacion interna"   ON public.tasks;
--- CREATE POLICY "read authenticated" ON public.tasks FOR SELECT TO authenticated USING (true);
--- CREATE POLICY "admin insert"       ON public.tasks FOR INSERT TO authenticated WITH CHECK (public.is_admin());
--- CREATE POLICY "admin update"       ON public.tasks FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
--- CREATE POLICY "admin delete"       ON public.tasks FOR DELETE TO authenticated USING (public.is_admin());
---
+-- DROP POLICY IF EXISTS "read authenticated" ON public.projects;
+-- CREATE POLICY "lectura publica" ON public.projects FOR SELECT USING (true);
+-- DROP POLICY IF EXISTS "read authenticated" ON public.tickets;
+-- CREATE POLICY "lectura publica" ON public.tickets FOR SELECT USING (true);
+-- DROP POLICY IF EXISTS "read authenticated" ON public.orders;
+-- CREATE POLICY "lectura publica" ON public.orders FOR SELECT USING (true);
+-- DROP POLICY IF EXISTS "read authenticated" ON public.status_log;
+-- CREATE POLICY "lectura publica" ON public.status_log FOR SELECT USING (true);
+-- DROP POLICY IF EXISTS "read authenticated" ON public.team_activities;
+-- CREATE POLICY "lectura publica" ON public.team_activities FOR SELECT USING (true);
+-- DROP POLICY IF EXISTS "read authenticated" ON public.installations;
+-- DROP POLICY IF EXISTS "admin insert" ON public.installations;
+-- DROP POLICY IF EXISTS "admin update" ON public.installations;
+-- DROP POLICY IF EXISTS "admin delete" ON public.installations;
+-- CREATE POLICY "lectura publica"           ON public.installations FOR SELECT USING (true);
+-- CREATE POLICY "anon insert installations" ON public.installations FOR INSERT TO anon WITH CHECK (true);
+-- CREATE POLICY "anon update installations" ON public.installations FOR UPDATE TO anon USING (true) WITH CHECK (true);
+-- CREATE POLICY "anon delete installations" ON public.installations FOR DELETE TO anon USING (true);
+-- DROP POLICY IF EXISTS "read authenticated" ON public.tasks;
+-- DROP POLICY IF EXISTS "admin insert" ON public.tasks;
+-- DROP POLICY IF EXISTS "admin update" ON public.tasks;
+-- DROP POLICY IF EXISTS "admin delete" ON public.tasks;
+-- CREATE POLICY "lectura publica"       ON public.tasks FOR SELECT USING (true);
+-- CREATE POLICY "escritura interna"     ON public.tasks FOR INSERT WITH CHECK (true);
+-- CREATE POLICY "actualizacion interna" ON public.tasks FOR UPDATE USING (true);
+-- CREATE POLICY "eliminacion interna"   ON public.tasks FOR DELETE USING (true);
 -- COMMIT;
