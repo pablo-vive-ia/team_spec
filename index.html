@@ -2363,19 +2363,42 @@
         onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">${TASK_STATUS_LABEL[t.status]}</button>`;
     }
 
+    // Dropdown de reasignación rápida dentro de la tarjeta — alternativa al
+    // drag & drop. Incluye al responsable actual aunque esté fuera de
+    // TEAM_MEMBERS, así nunca desaparece de su propio selector.
+    function assigneeSelectHtml(t) {
+      const current = canonAssignee(t.assignee);
+      const opts = (TEAM_MEMBERS.includes(current) || current === UNASSIGNED)
+        ? TEAM_MEMBERS : [...TEAM_MEMBERS, current];
+      return `<select onclick="event.stopPropagation()" onchange="event.stopPropagation();reassignTask('${t.id}', this.value)"
+        title="Reasignar responsable"
+        style="width:100%;margin-top:7px;font-size:10px;padding:4px 6px;border-radius:6px;border:1px solid var(--b1);background:var(--s1);color:var(--t2);font-family:inherit;cursor:pointer;outline:none">
+        ${opts.map(m => `<option value="${esc(m)}"${current===m?' selected':''}>${esc(m)}</option>`).join('')}
+        <option value=""${current===UNASSIGNED?' selected':''}>Sin asignar</option>
+      </select>`;
+    }
+
     function taskCard(t, kind) {
       const prioC   = TASK_PRIO_COLOR[t.priority] || 'var(--t3)';
       const done    = t.status === 'completado';
       const overdue = kind === 'carry';
+      // Arrastrable solo para admin: soltarla sobre otra columna la reasigna
+      // (ver dropAttrs en renderTareasTablero / dropTaskOnAssignee).
+      const dragAttrs = canEdit() ? `draggable="true" ondragstart="event.dataTransfer.setData('text/plain','${t.id}')"` : '';
       return `
         <div class="glass-sm ch" style="border-radius:10px;padding:9px 10px;border-left:3px solid ${prioC};${done?'opacity:0.58;':''}${overdue?'background:rgba(239,68,68,0.05);':''}${kind==='nodate'?'border-left-style:dashed;':''}${canEdit()?'cursor:pointer;':''}"
-             ${canEdit()?`onclick="openTaskModal('${t.id}')"`:''}>
+             ${dragAttrs} ${canEdit()?`onclick="openTaskModal('${t.id}')"`:''}>
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
             <span style="padding:2px 7px;border-radius:99px;font-size:9px;font-weight:800;letter-spacing:0.05em;background:${prioC}22;color:${prioC}">${TASK_PRIO_LABEL[t.priority]||esc(t.priority)}</span>
             <span style="margin-left:auto;font-size:9.5px;font-weight:700;font-family:var(--font-mono);color:${overdue?'var(--danger)':'var(--t3)'};white-space:nowrap">${overdue?'⚠ ':''}${shortDate(t.due_date)}</span>
           </div>
-          <div style="font-size:12.5px;font-weight:600;line-height:1.35;color:${done?'var(--t3)':'var(--t1)'};${done?'text-decoration:line-through;':''}display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${esc(t.title)}</div>
+          <div style="display:flex;align-items:flex-start;gap:7px">
+            ${canEdit() ? `<input type="checkbox" ${done?'checked':''} onclick="event.stopPropagation()" onchange="event.stopPropagation();toggleTaskDone('${t.id}',this.checked)"
+              title="Marcar como completada" style="width:14px;height:14px;margin-top:2px;accent-color:var(--acc);cursor:pointer;flex-shrink:0">` : ''}
+            <div style="font-size:12.5px;font-weight:600;line-height:1.35;color:${done?'var(--t3)':'var(--t1)'};${done?'text-decoration:line-through;':''}display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;flex:1;min-width:0">${esc(t.title)}</div>
+          </div>
           ${t.next_step ? `<div style="margin-top:7px;padding:6px 8px;border-radius:7px;background:var(--row-b);border-left:2px solid var(--acc2);font-size:10.5px;line-height:1.4;color:var(--t2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden"><span style="color:var(--acc2);font-weight:700">→</span> ${esc(t.next_step)}</div>` : ''}
+          ${canEdit() ? assigneeSelectHtml(t) : ''}
           <div style="display:flex;align-items:center;gap:5px;margin-top:8px">
             ${statusChipHtml(t)}
             ${canEdit() ? `<button onclick="event.stopPropagation();deleteTask('${t.id}')" title="Eliminar"
@@ -2393,14 +2416,18 @@
       </div>`;
     }
 
-    function renderTareasTablero(b, order) {
+    function renderTareasTablero(b, order, filterAssignee) {
       const groupsOf = list => {
         const m = {};
         for (const t of list) { const a = canonAssignee(t.assignee); (m[a] = m[a] || []).push(t); }
         return m;
       };
       const gWeek = groupsOf(b.inWeek), gCarry = groupsOf(b.carry), gNo = groupsOf(b.noDate);
-      const visible = order.filter(a => TEAM_MEMBERS.includes(a) || gWeek[a] || gCarry[a] || gNo[a]);
+      // Con un filtro de responsable activo, mostrar SOLO esa columna (el resto
+      // desaparece) — los grupos ya vienen pre-filtrados desde renderTareas().
+      const visible = (filterAssignee && filterAssignee !== 'Todos')
+        ? [filterAssignee]
+        : order.filter(a => TEAM_MEMBERS.includes(a) || gWeek[a] || gCarry[a] || gNo[a]);
       if (!visible.length)
         return `<div class="glass" style="border-radius:12px;padding:48px;text-align:center;color:var(--t3);font-size:12px">Sin tareas para esta semana.</div>`;
 
@@ -2418,6 +2445,10 @@
           const total  = w.length + c.length + n.length;
           const done   = w.filter(t => t.status === 'completado').length;
           const extern = name !== UNASSIGNED && !TEAM_MEMBERS.includes(name);
+          // Drop zone: soltar una tarjeta acá la reasigna a esta persona (solo admin)
+          const dropAttrs = canEdit() ? `ondragover="event.preventDefault();this.style.background='rgba(59,107,247,0.06)'"
+            ondragleave="this.style.background=''"
+            ondrop="this.style.background='';dropTaskOnAssignee(event,'${jsArg(name)}')"` : '';
           return `
           <div class="glass" style="border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
             <div style="position:relative;padding:12px 13px;border-bottom:1px solid var(--card-b);display:flex;align-items:center;gap:9px">
@@ -2432,7 +2463,7 @@
                 onmouseover="this.style.borderColor='var(--acc)';this.style.color='var(--acc)'"
                 onmouseout="this.style.borderColor='var(--b1)';this.style.color='var(--t3)'">+</button>` : ''}
             </div>
-            <div style="padding:10px;display:flex;flex-direction:column;gap:8px;max-height:62vh;overflow-y:auto">
+            <div style="padding:10px;display:flex;flex-direction:column;gap:8px;max-height:62vh;overflow-y:auto;transition:background 0.15s" ${dropAttrs}>
               ${w.length ? w.map(t => taskCard(t,'week')).join('')
                          : `<div style="padding:16px 4px;text-align:center;font-size:10.5px;color:var(--t3)">Sin tareas esta semana</div>`}
               ${c.length ? colDivider('ARRASTRE','var(--danger)') + c.map(t => taskCard(t,'carry')).join('') : ''}
@@ -2467,8 +2498,14 @@
               const prioC   = TASK_PRIO_COLOR[t.priority] || 'var(--t3)';
               return `<tr style="border-bottom:1px solid var(--b1);background:${overdue?'rgba(239,68,68,0.06)':(idx%2?'var(--row-b)':'transparent')};${overdue?'border-left:3px solid var(--danger);':''}">
                 <td style="padding:12px 16px;max-width:280px">
-                  <div style="font-weight:600;color:${done?'var(--t3)':'var(--t1)'};${done?'text-decoration:line-through':''}">${esc(t.title)}</div>
-                  ${t.description?`<div style="font-size:11px;color:var(--t3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px">${esc(t.description)}</div>`:''}
+                  <div style="display:flex;align-items:flex-start;gap:8px">
+                    ${canEdit() ? `<input type="checkbox" ${done?'checked':''} onchange="toggleTaskDone('${t.id}',this.checked)"
+                      title="Marcar como completada" style="width:14px;height:14px;margin-top:3px;accent-color:var(--acc);cursor:pointer;flex-shrink:0">` : ''}
+                    <div style="min-width:0">
+                      <div style="font-weight:600;color:${done?'var(--t3)':'var(--t1)'};${done?'text-decoration:line-through':''}">${esc(t.title)}</div>
+                      ${t.description?`<div style="font-size:11px;color:var(--t3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px">${esc(t.description)}</div>`:''}
+                    </div>
+                  </div>
                 </td>
                 <td style="padding:12px 16px;color:var(--acc);font-weight:600;white-space:nowrap">${esc(canonAssignee(t.assignee))}</td>
                 <td style="padding:12px 16px;color:var(--t2);max-width:250px"><span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(t.next_step)||'—'}</span></td>
@@ -2563,7 +2600,7 @@
           <span style="font-size:11px;color:var(--t3)">${b.all.length} en vista · ${D.tasks.length} total</span>
         </div>
 
-        ${taskView === 'tablero' ? renderTareasTablero(b, order) : renderTareasTabla(b)}
+        ${taskView === 'tablero' ? renderTareasTablero(b, order, activeTaskAssignee) : renderTareasTabla(b)}
         ${canEdit() ? taskModalHtml() : ''}
       `;
     }
@@ -2713,6 +2750,37 @@
       const { error } = await sb.from('tasks').delete().eq('id', id);
       if (error) { showError(error.message); return; }
       await loadAll();
+    };
+
+    // Checkbox de "completada" — atajo directo a completado/pendiente, en
+    // paralelo al chip de estado (que sigue permitiendo el ciclo completo con
+    // en_progreso). Al destildar vuelve a pendiente, igual que hace el ciclo.
+    window.toggleTaskDone = async function(id, checked) {
+      if (!requireAdmin()) return;
+      const { error } = await sb.from('tasks')
+        .update({ status: checked ? 'completado' : 'pendiente', updated_at: new Date().toISOString() }).eq('id', id);
+      if (error) { showError(error.message); return; }
+      await loadAll();
+    };
+
+    // Reasignar responsable — desde el <select> de la tarjeta o desde un drop.
+    // rawAssignee puede ser un nombre canónico, "" (Sin asignar) o el nombre
+    // de la columna donde se soltó la tarjeta.
+    window.reassignTask = async function(id, rawAssignee) {
+      if (!requireAdmin()) return;
+      const canon = canonAssignee(rawAssignee);
+      const value = canon === UNASSIGNED ? null : canon;
+      const { error } = await sb.from('tasks')
+        .update({ assignee: value, updated_at: new Date().toISOString() }).eq('id', id);
+      if (error) { showError(error.message); return; }
+      await loadAll();
+    };
+
+    window.dropTaskOnAssignee = async function(event, personName) {
+      event.preventDefault();
+      const id = event.dataTransfer.getData('text/plain');
+      if (!id) return;
+      await reassignTask(id, personName);
     };
 
     window.setTaskStatusFilter   = function(s) { activeTaskStatus   = s; render(); };

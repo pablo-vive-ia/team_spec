@@ -108,6 +108,12 @@ Reemplazó a "Tareas Internas" (2026-09-03). Misma tabla `tasks`, módulo reescr
 - **Color y orden de columnas estables**: `buildAssigneeOrder(D.tasks)` rankea sobre el dataset **completo** (mismo criterio que `buildGroupColorMap`), así una persona no cambia de color ni de posición al navegar semanas o filtrar.
 - **Grid responsivo**: `repeat(auto-fit,minmax(230px,1fr))` (no `grid-auto-flow:column`) — las columnas se achican para entrar todas en una fila a medida que crece el equipo, en vez de forzar scroll horizontal apenas se pasan de ~4-5 personas. `overflow-x:auto` queda como red de seguridad en viewports angostos.
 - Stats de la semana visible: De la semana / En progreso / Completadas / Arrastre / Sin fecha (los dos últimos solo si la semana es la actual y hay > 0).
+- **Filtro de responsable = una sola columna**: con `activeTaskAssignee` distinto de `'Todos'`, `renderTareasTablero(b, order, filterAssignee)` muestra únicamente la columna de esa persona — el resto desaparece (no se listan vacías). El dataset ya viene pre-filtrado desde `renderTareas()`, así que alcanza con restringir `visible` a `[filterAssignee]`.
+- **Reasignar responsable, dos vías** (solo admin):
+  1. **Drag & drop**: cada tarjeta es `draggable` (atributo nativo HTML5, `dataTransfer` lleva el id de la tarea); el body de cada columna es drop zone (`dropTaskOnAssignee(event, name)`, con feedback visual de fondo al pasar por encima). Soltar sobre una columna reasigna a esa persona.
+  2. **`<select>` en la tarjeta** (`assigneeSelectHtml`): alternativa sin arrastrar. Lista `TEAM_MEMBERS` + el responsable actual si está fuera de esa lista (nunca lo saca del propio selector) + "Sin asignar".
+  Ambas vías llaman a `reassignTask(id, rawAssignee)`, que pasa por `canonAssignee()` antes de guardar — igual que el modal.
+- **Checkbox de completado** en cada tarjeta (y en la fila de la vista Tabla): atajo directo `toggleTaskDone(id, checked)` que pasa a `completado` (tachado) o vuelve a `pendiente`, en paralelo al chip de estado que sigue permitiendo el ciclo completo con `en_progreso`.
 - Filtros: estado y responsable (data-driven desde `order`).
 - Export CSV/PDF — el **PDF va agrupado por responsable**, para que el impreso refleje el tablero y no una tabla plana.
 - El botón `+` del header de cada columna precarga responsable y el **viernes de la semana visible** — es el mecanismo que hace natural el agrupamiento por `due_date` sin campo de semana.
