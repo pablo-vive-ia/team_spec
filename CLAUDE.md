@@ -12,7 +12,7 @@ Full spec: [`dashboard-vive-os-spec.md`](dashboard-vive-os-spec.md)
 
 ```
 Zammad API ──┐
-             ├─► n8n (sync cron, every 15 min) ──► Supabase (tables)
+             ├─► n8n (sync cron, every 4h) ──► Supabase (tables)
 Zoho API ────┘                                          │
                                                         ▼
                                         index.html (Supabase JS Realtime, no polling)
@@ -26,8 +26,8 @@ Zoho API ────┘                                          │
 - **MCP access:** available via `.mcp.json` — apply schema via MCP or SQL Editor
 - **Schema:** `schema.sql` (idempotente, seguro para re-ejecutar con IF NOT EXISTS)
 - **Security model:** anon key is hardcoded in client JS — this is intentional y por sí sola no da acceso a nada. Toda la autorización vive en RLS. **Modelo por roles (desde 2026-09-03):** Supabase Auth con email+password; tabla `profiles` (`id` FK a `auth.users`, `role` en `admin`|`viewer`) y helper `public.is_admin()` (SECURITY DEFINER, bypassea el RLS de `profiles` para no recursar). `admin` escribe; `viewer` solo lee. Los syncs de n8n usan `service_role`, que bypassea RLS — no se ven afectados por ningún cambio de policy.
-  - ✅ **RLS restrictiva aplicada 2026-09-03**: las 14 policies de las 8 tablas del dashboard son `TO authenticated`, ninguna `TO public`/`TO anon`. Verificado con anon puro: `SELECT` devuelve `[]`, `INSERT` falla `42501`. `viewer` es de solo lectura real, no cosmético. Los syncs de n8n (`service_role`) verificados escribiendo sin problema post-cambio.
-- **Realtime:** subscriptions on 6 tables (`projects`, `installations`, `tickets`, `orders`, `status_log`, `tasks`) — no polling needed in the frontend.
+  - ✅ **RLS restrictiva aplicada 2026-09-03**: las policies de las 8 tablas del dashboard son `TO authenticated`, ninguna `TO public`/`TO anon` (15 policies: 5 tablas solo-SELECT + `installations`/`tasks` con 4 c/u [SELECT + 3 de escritura solo-admin] + `profiles` con 1 + `status_log` con 2 [SELECT + INSERT solo-admin, agregado el mismo día para el historial de tareas]). Verificado con anon puro: `SELECT` devuelve `[]`, `INSERT` falla `42501`. `viewer` es de solo lectura real, no cosmético. Los syncs de n8n (`service_role`) verificados escribiendo sin problema post-cambio.
+- **Realtime:** subscriptions on 7 tables (`projects`, `installations`, `tickets`, `orders`, `status_log`, `tasks`, `team_activities`) — no polling needed in the frontend.
 - **Aplicar schema:** ir a [SQL Editor](https://supabase.com/dashboard/project/osnttxgmsfudghinxfat/sql/new) y ejecutar `schema.sql` completo.
 
 ## Frontend Constraints
@@ -36,10 +36,10 @@ Zoho API ────┘                                          │
 - Tailwind CSS via CDN `<script src="https://cdn.tailwindcss.com">`
 - Supabase JS via CDN (importmap or `<script type="module">`)
 - Dark theme default + light mode toggle — glassmorphism aesthetic
-- State in plain JS variables — no localStorage
+- State in plain JS variables. `localStorage` solo para 3 preferencias puntuales del viewer: `spec-theme` (dark/light), `spec-task-view` (Tablero/Tabla en Planificación), `spec-sb-auth` (sesión de Supabase Auth) — no para datos de negocio.
 - Responsive but desktop-priority (used for screen sharing)
 
-**Team selector:** top-level tabs "netTime" / "SPECManager" that apply `.eq('team', activeTeam)` to every Supabase query. Same HTML, different filter — not two pages.
+**Team/grupo:** no hay selector global de equipo — `loadAll()` trae todas las tablas completas una sola vez (sin `.eq('team', …)` en las queries) y cada sección filtra client-side sobre `D` con sus propios pills (ej. `PROJ_GROUPS` en Proyectos, `activeTicketGroup` en Tickets). Esta nota reemplaza una versión previa que describía tabs top-level "netTime"/"SPECManager" con filtro server-side — eso nunca se implementó así; el mecanismo real siempre fue por sección.
 
 **Sections (nav order):** Resumen, Proyectos, Instalaciones, Tickets, Pedidos, **Planificación**, **Actividades Equipo**, Historial.
 
@@ -120,10 +120,10 @@ Reemplazó a "Tareas Internas" (2026-09-03). Misma tabla `tasks`, módulo reescr
 
 ### Actividades Equipo
 
-- Tab "ACTIVIDADES EQUIPO" posicionado entre Tareas Internas e Historial.
-- **Sin filtro de equipo** — igual que Tareas Internas, el campo `team` no se filtra en la UI (siempre default `netTime`); Zoho clasifica el proyecto origen bajo el grupo "SPEC ARGENTINA", que no mapea limpio a netTime/SPECManager, así que la sección es transversal a todo el equipo técnico.
+- Tab "ACTIVIDADES EQUIPO" posicionado entre Planificación e Historial.
+- **Sin filtro de equipo** — igual que Planificación, el campo `team` no se filtra en la UI (siempre default `netTime`); Zoho clasifica el proyecto origen bajo el grupo "SPEC ARGENTINA", que no mapea limpio a netTime/SPECManager, así que la sección es transversal a todo el equipo técnico.
 - Origen: proyecto Zoho Projects **"PR-17 .ACTIVIDAD EQUIPO TECNICO"** (id `1972504000000057737`, portal `grupospeclatam`). Las "categorías" que se ven (COMERCIAL_SOPORTE, REUNIONES_INTERNAS, PROYECTOS, SOPORTE_TICKETS, SOPORTE_INTERNO, PEDIDOS_REUNIONES, PEDIDOS_PREPARACION, PEDIDO_REMITOS, N/A, CAPACITACION, etc.) son **nombres de Tareas Zoho** dentro de ese proyecto — cada persona carga horas contra una de ellas.
-- Tabla `team_activities`: solo lectura desde el frontend (anon key), escritura exclusiva vía service_role desde n8n — mismo modelo que `tickets`/`orders`. Sin CRUD manual, sin `status_log` (no hay máquina de estados en un registro de tiempo).
+- Tabla `team_activities`: solo lectura desde el frontend (usuario autenticado, desde el hardening RLS del 2026-09-03), escritura exclusiva vía service_role desde n8n — mismo modelo que `tickets`/`orders`. Sin CRUD manual, sin `status_log` (no hay máquina de estados en un registro de tiempo).
 - Filtros: período (hoy/semana/mes/mes anterior/3m/6m/año/todo, sobre `log_date`), técnico (`user_name`, data-driven, sin lista canónica), categoría (`activity`, data-driven).
 - KPIs: horas totales, registros, técnicos activos, categoría top del período/filtro activo.
 - **Gráfico "HORAS POR CATEGORÍA": donut SVG interactivo agrupado**, no las ~17 categorías finas de Zoho. `activityGroup(cat)` colapsa esas categorías en 6 familias legibles (Comercial, Pedidos, Soporte, Proyectos, Reuniones, Otros) por prefijo/substring del nombre de Tarea Zoho — sin lista canónica de Zoho, todo lo que no matchea cae en "Otros". Con solo 6 slices un donut es legible (a diferencia de las ~17 categorías finas, que sí hubiesen sido ilegibles como pie — de ahí que la primera versión usara barras horizontales per skill `dataviz`).
@@ -146,8 +146,8 @@ Reemplazó a "Tareas Internas" (2026-09-03). Misma tabla `tasks`, módulo reescr
 
 | Workflow | ID | Trigger | Target tables |
 |---|---|---|---|
-| `zammad-sync-supabase` | `votsdMSzgAHnTSA0` | Cron 4h (nodo se llama "Cron 4hs"; CLAUDE.md decía 15 min, desactualizado) | `tickets`, `status_log` |
-| `zoho-projects-sync-supabase` | `bbnieKNegHRGrfvF` | Cron 4h (nodo se llama "Cron 4hs"; CLAUDE.md decía 12h, desactualizado) | `projects`, `orders`, `status_log`, `team_activities` |
+| `zammad-sync-supabase` | `votsdMSzgAHnTSA0` | Cron 4h (nodo "Cron 4hs") | `tickets`, `status_log` |
+| `zoho-projects-sync-supabase` | `bbnieKNegHRGrfvF` | Cron 4h (nodo "Cron 4hs") | `projects`, `orders`, `status_log`, `team_activities` |
 | `telegram-status-update` | `SjD5aAOWywPS92eM` | Telegram voice/text | `installations` + `status_log` |
 
 URLs:
@@ -164,10 +164,10 @@ URLs:
 - `logo.png` — ✅ en raíz del proyecto.
 - Supabase MCP — ✅ configurado en `.mcp.json` (`osnttxgmsfudghinxfat`).
 - n8n MCP — ✅ configurado en `.mcp.json` via HTTP transport (`https://n8n.vive-ia.com/mcp-server/http`).
-- `zoho-projects-sync-supabase` — ✅ funcionando. Proyectos (20 items) y pedidos (14 milestones activos) sincronizando. Cron 12h activo. Comparación case-insensitive. Paginación milestones cubre índices 1–601. 16/20 proyectos con `next_step`.
+- `zoho-projects-sync-supabase` — ✅ funcionando. Proyectos y pedidos sincronizando (conteos varían con el tiempo, ver Supabase para el número actual). Cron 4h activo. Comparación case-insensitive. Paginación milestones cubre índices 1–601. Mayoría de proyectos activos con `next_step`.
 - `telegram-status-update` — ✅ activo y testeado. Crea Y actualiza instalaciones. Credencial: `Team_Spec` (Telegram API).
-- `zammad-sync-supabase` — ✅ activo y sincronizando (contradice la nota vieja de "credencial no creada" — la credencial `Zammad API` ya existía y el workflow lleva corriendo un buen tiempo; 3270+ tickets en Supabase desde 2018 hasta hoy). Ampliado el 2026-08-04: además de abiertos/nuevos/pendientes, trae tickets cerrados en los últimos 7 días con su estado real de Zammad (ver "Zammad Sync — Estado Detallado"), y excluye tickets `Interno::Pedido` (y similares) de raíz.
-- Netlify deploy — ⏳ pendiente (drag & drop de la carpeta, sin `netlify.toml`).
+- `zammad-sync-supabase` — ✅ activo y sincronizando (contradice la nota vieja de "credencial no creada" — la credencial `Zammad API` ya existía y el workflow lleva corriendo un buen tiempo; 3.201 tickets en Supabase al 2026-09-03, desde el 27/01/2022 — no desde 2018 como decía una nota vieja, verificado por SQL directo). Ampliado el 2026-08-04: además de abiertos/nuevos/pendientes, trae tickets cerrados en los últimos 7 días con su estado real de Zammad (ver "Zammad Sync — Estado Detallado"), y excluye tickets `Interno::Pedido` (y similares) de raíz. **El filtro de período del frontend solo llega hasta "Este año"** — el histórico 2022-2025 existe en la DB pero no es accesible desde la UI del dashboard, solo consultando Supabase directo.
+- Netlify deploy — ✅ auto-deploy conectado al repo de GitHub (push a `master` publica solo, sin `netlify.toml`).
 
 ## Zoho Sync — Estado Detallado
 
@@ -242,7 +242,7 @@ Rama nueva (agregada 2026-07-22) dentro del mismo workflow `zoho-projects-sync-s
 
 ## Zammad Sync — Estado Detallado
 
-Workflow `zammad-sync-supabase` (`votsdMSzgAHnTSA0`). ✅ Activo, corriendo cada 4h (nodo "Cron 4hs"). La nota histórica de "pendiente de credencial" era incorrecta/desactualizada — la credencial `Zammad API` ya está creada y el workflow lleva tiempo sincronizando (3270+ tickets en Supabase desde 2018, probablemente de un backfill histórico anterior a esta documentación).
+Workflow `zammad-sync-supabase` (`votsdMSzgAHnTSA0`). ✅ Activo, corriendo cada 4h (nodo "Cron 4hs"). La nota histórica de "pendiente de credencial" era incorrecta/desactualizada — la credencial `Zammad API` ya está creada y el workflow lleva tiempo sincronizando (3.201 tickets en Supabase al 2026-09-03, desde el 27/01/2022 — de un backfill histórico anterior a esta documentación; la nota vieja decía "desde 2018", corregido tras verificar por SQL directo).
 
 ### Conexión Zammad
 - **Host:** `190.210.223.60` (IP directa, SSL con SNI `soporte.grupospec.com.ar`)
