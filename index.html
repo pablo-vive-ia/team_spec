@@ -2234,10 +2234,16 @@
 
     // Equipo canónico: define las columnas del tablero. Un miembro sin tareas
     // igual tiene columna (columna vacía = señal útil en la reunión semanal).
-    const TEAM_MEMBERS = ['Pablo Frisardi', 'Guido Rienzo', 'Marcelo'];
+    const TEAM_MEMBERS = ['Pablo Frisardi', 'Gustavo Ernesto', 'Guido Rienzo', 'Humberto Navarro', 'Nazareno Sanchez'];
     // Alias explícitos (clave normalizada → nombre canónico). NO se hace merge
     // automático por primer token: si mañana entra otro Pablo, se mezclarían.
-    const TASK_ASSIGNEE_ALIAS = { 'pablo': 'Pablo Frisardi' };
+    const TASK_ASSIGNEE_ALIAS = {
+      'pablo':    'Pablo Frisardi',
+      'gustavo':  'Gustavo Ernesto',
+      'guido':    'Guido Rienzo',
+      'humberto': 'Humberto Navarro',
+      'nazareno': 'Nazareno Sanchez',
+    };
     const UNASSIGNED   = 'Sin asignar';
     const TASK_COLORS  = ['var(--acc)','var(--acc2)','var(--acc3)','var(--success)','var(--warn)','var(--danger)'];
 
@@ -2401,7 +2407,11 @@
       // Viernes de la semana visible: precarga sensata al crear desde una columna
       const defDue = new Date(b.ws); defDue.setDate(defDue.getDate() + 4);
 
-      return `<div style="display:grid;grid-auto-flow:column;grid-auto-columns:minmax(272px,1fr);gap:14px;overflow-x:auto;padding-bottom:10px;align-items:start">
+      // auto-fit (no grid-auto-flow:column) para que las columnas se achiquen y
+      // quepan todas en una fila a medida que crece el equipo, en vez de forzar
+      // scroll horizontal apenas se pasa de ~4-5 personas. overflow-x se deja
+      // como red de seguridad para viewports muy angostos.
+      return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;overflow-x:auto;padding-bottom:10px;align-items:start">
         ${visible.map(name => {
           const color  = assigneeColor(name, order);
           const w = gWeek[name]||[], c = gCarry[name]||[], n = gNo[name]||[];

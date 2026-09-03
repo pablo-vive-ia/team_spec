@@ -101,11 +101,12 @@ Reemplazó a "Tareas Internas" (2026-09-03). Misma tabla `tasks`, módulo reescr
   Garantiza que ninguna tarea abierta quede invisible (volver a "Hoy" muestra el 100% del pendiente) sin duplicar: navegando a semanas pasadas se ve la foto histórica real. Las cerradas/canceladas no arrastran.
 - **⚠️ `dueOf(t)` es obligatorio para toda comparación de fechas.** `due_date` es `DATE` y `new Date('2026-09-07')` parsea como medianoche **UTC**, que en AR (UTC-3) retrocede al 06 — movería la tarea de semana. `dueOf()` fuerza `T12:00:00`. Este bug existía en el código viejo.
 - **Responsables**: `assignee` sigue siendo texto libre (no se agregó FK). Cuatro capas contra el problema de "Pablo" vs "Pablo Frisardi":
-  1. `TEAM_MEMBERS` — lista canónica que define las columnas. **Un miembro sin tareas igual tiene columna** (vacía = señal útil en la reunión).
-  2. `canonAssignee()` en runtime (normaliza acentos/mayúsculas/espacios + `TASK_ASSIGNEE_ALIAS`). **No hace merge automático por primer token**: si mañana entra otro Pablo, se mezclarían en silencio.
+  1. `TEAM_MEMBERS` — lista canónica que define las columnas: `Pablo Frisardi`, `Gustavo Ernesto`, `Guido Rienzo`, `Humberto Navarro`, `Nazareno Sanchez` (coincide 1:1 con los 5 usuarios de Supabase Auth — 2 admin, 3 viewer). **Un miembro sin tareas igual tiene columna** (vacía = señal útil en la reunión).
+  2. `canonAssignee()` en runtime (normaliza acentos/mayúsculas/espacios + `TASK_ASSIGNEE_ALIAS`, que además mapea el primer nombre de cada uno — ej. `'gustavo'` → `Gustavo Ernesto`). **No hace merge automático por primer token en general**: si mañana entra otro Pablo, se mezclarían en silencio — los alias de `TASK_ASSIGNEE_ALIAS` son explícitos, no inferidos.
   3. `<datalist>` en el modal — la mitigación preventiva real.
-  4. Un responsable desconocido **nunca se descarta**: obtiene columna propia marcada con ⚠.
+  4. Un responsable desconocido **nunca se descarta**: obtiene columna propia marcada con ⚠ (ej. "Marcelo", técnico de Instalaciones que no forma parte de este equipo).
 - **Color y orden de columnas estables**: `buildAssigneeOrder(D.tasks)` rankea sobre el dataset **completo** (mismo criterio que `buildGroupColorMap`), así una persona no cambia de color ni de posición al navegar semanas o filtrar.
+- **Grid responsivo**: `repeat(auto-fit,minmax(230px,1fr))` (no `grid-auto-flow:column`) — las columnas se achican para entrar todas en una fila a medida que crece el equipo, en vez de forzar scroll horizontal apenas se pasan de ~4-5 personas. `overflow-x:auto` queda como red de seguridad en viewports angostos.
 - Stats de la semana visible: De la semana / En progreso / Completadas / Arrastre / Sin fecha (los dos últimos solo si la semana es la actual y hay > 0).
 - Filtros: estado y responsable (data-driven desde `order`).
 - Export CSV/PDF — el **PDF va agrupado por responsable**, para que el impreso refleje el tablero y no una tabla plana.
