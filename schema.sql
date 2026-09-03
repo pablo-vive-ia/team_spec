@@ -396,3 +396,19 @@ COMMIT;
 -- CREATE POLICY "actualizacion interna" ON public.tasks FOR UPDATE USING (true);
 -- CREATE POLICY "eliminacion interna"   ON public.tasks FOR DELETE USING (true);
 -- COMMIT;
+
+
+-- ============================================================
+-- HISTORIAL DE TAREAS   ✅ aplicada 2026-09-03
+-- ============================================================
+-- status_log ya existía (projects/orders/installations, escrito por n8n con
+-- service_role). Acá se habilita para que el frontend (admin autenticado)
+-- también pueda loguear cambios de estado de tareas.
+
+DO $$ BEGIN
+  ALTER TYPE entity_type ADD VALUE IF NOT EXISTS 'task';
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DROP POLICY IF EXISTS "admin insert status_log" ON public.status_log;
+CREATE POLICY "admin insert status_log" ON public.status_log
+  FOR INSERT TO authenticated WITH CHECK (public.is_admin());

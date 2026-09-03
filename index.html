@@ -2282,11 +2282,12 @@
       if (o === -1) return 'SEMANA PASADA';
       return o > 0 ? 'EN ' + o + ' SEMANAS' : 'HACE ' + Math.abs(o) + ' SEMANAS';
     }
-    function shortDate(s) {
+    // dd/mm/aaaa — mismo criterio que fmtDate() para el resto de la app
+    // (CLAUDE.md: fechas siempre en formato absoluto, nunca relativas).
+    function dmy(s) {
       if (!s) return 'S/F';
-      return new Date(s + 'T12:00:00')
-        .toLocaleDateString('es-AR', { weekday:'short', day:'2-digit', month:'2-digit' })
-        .replace('.', '');
+      const [y, m, d] = s.split('-');
+      return `${d}/${m}/${y}`;
     }
 
     // ── Responsables: canonicalización, orden y color estables ─────────
@@ -2372,7 +2373,7 @@
         ? TEAM_MEMBERS : [...TEAM_MEMBERS, current];
       return `<select onclick="event.stopPropagation()" onchange="event.stopPropagation();reassignTask('${t.id}', this.value)"
         title="Reasignar responsable"
-        style="width:100%;margin-top:7px;font-size:10px;padding:4px 6px;border-radius:6px;border:1px solid var(--b1);background:var(--s1);color:var(--t2);font-family:inherit;cursor:pointer;outline:none">
+        style="flex:1;min-width:0;font-size:9.5px;padding:3px 4px;border-radius:6px;border:1px solid var(--b1);background:var(--s1);color:var(--t2);font-family:inherit;cursor:pointer;outline:none">
         ${opts.map(m => `<option value="${esc(m)}"${current===m?' selected':''}>${esc(m)}</option>`).join('')}
         <option value=""${current===UNASSIGNED?' selected':''}>Sin asignar</option>
       </select>`;
@@ -2386,21 +2387,21 @@
       // (ver dropAttrs en renderTareasTablero / dropTaskOnAssignee).
       const dragAttrs = canEdit() ? `draggable="true" ondragstart="event.dataTransfer.setData('text/plain','${t.id}')"` : '';
       return `
-        <div class="glass-sm ch" style="border-radius:10px;padding:9px 10px;border-left:3px solid ${prioC};${done?'opacity:0.58;':''}${overdue?'background:rgba(239,68,68,0.05);':''}${kind==='nodate'?'border-left-style:dashed;':''}${canEdit()?'cursor:pointer;':''}"
+        <div class="glass-sm ch" style="border-radius:9px;padding:8px 9px;border-left:3px solid ${prioC};${done?'opacity:0.58;':''}${overdue?'background:rgba(239,68,68,0.05);':''}${kind==='nodate'?'border-left-style:dashed;':''}${canEdit()?'cursor:pointer;':''}"
              ${dragAttrs} ${canEdit()?`onclick="openTaskModal('${t.id}')"`:''}>
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
             <span style="padding:2px 7px;border-radius:99px;font-size:9px;font-weight:800;letter-spacing:0.05em;background:${prioC}22;color:${prioC}">${TASK_PRIO_LABEL[t.priority]||esc(t.priority)}</span>
-            <span style="margin-left:auto;font-size:9.5px;font-weight:700;font-family:var(--font-mono);color:${overdue?'var(--danger)':'var(--t3)'};white-space:nowrap">${overdue?'⚠ ':''}${shortDate(t.due_date)}</span>
+            <span style="margin-left:auto;font-size:11px;font-weight:800;font-family:var(--font-mono);color:${overdue?'var(--danger)':'var(--t1)'};white-space:nowrap">${overdue?'⚠ ':''}${dmy(t.due_date)}</span>
           </div>
-          <div style="display:flex;align-items:flex-start;gap:7px">
+          <div style="display:flex;align-items:flex-start;gap:6px">
             ${canEdit() ? `<input type="checkbox" ${done?'checked':''} onclick="event.stopPropagation()" onchange="event.stopPropagation();toggleTaskDone('${t.id}',this.checked)"
               title="Marcar como completada" style="width:14px;height:14px;margin-top:2px;accent-color:var(--acc);cursor:pointer;flex-shrink:0">` : ''}
-            <div style="font-size:12.5px;font-weight:600;line-height:1.35;color:${done?'var(--t3)':'var(--t1)'};${done?'text-decoration:line-through;':''}display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;flex:1;min-width:0">${esc(t.title)}</div>
+            <div style="font-size:12.5px;font-weight:600;line-height:1.3;color:${done?'var(--t3)':'var(--t1)'};${done?'text-decoration:line-through;':''}display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;flex:1;min-width:0">${esc(t.title)}</div>
           </div>
-          ${t.next_step ? `<div style="margin-top:7px;padding:6px 8px;border-radius:7px;background:var(--row-b);border-left:2px solid var(--acc2);font-size:10.5px;line-height:1.4;color:var(--t2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden"><span style="color:var(--acc2);font-weight:700">→</span> ${esc(t.next_step)}</div>` : ''}
-          ${canEdit() ? assigneeSelectHtml(t) : ''}
-          <div style="display:flex;align-items:center;gap:5px;margin-top:8px">
+          ${t.next_step ? `<div style="margin-top:6px;padding:5px 7px;border-radius:6px;background:var(--row-b);border-left:2px solid var(--acc2);font-size:10.5px;line-height:1.35;color:var(--t2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden"><span style="color:var(--acc2);font-weight:700">→</span> ${esc(t.next_step)}</div>` : ''}
+          <div style="display:flex;align-items:center;gap:5px;margin-top:6px">
             ${statusChipHtml(t)}
+            ${canEdit() ? assigneeSelectHtml(t) : ''}
             ${canEdit() ? `<button onclick="event.stopPropagation();deleteTask('${t.id}')" title="Eliminar"
               style="margin-left:auto;padding:3px 7px;border-radius:6px;border:1px solid var(--b1);background:transparent;color:var(--t3);cursor:pointer;font-size:10px;font-family:inherit;transition:all 0.15s"
               onmouseover="this.style.borderColor='var(--danger)';this.style.color='var(--danger)'"
@@ -2438,7 +2439,7 @@
       // quepan todas en una fila a medida que crece el equipo, en vez de forzar
       // scroll horizontal apenas se pasa de ~4-5 personas. overflow-x se deja
       // como red de seguridad para viewports muy angostos.
-      return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;overflow-x:auto;padding-bottom:10px;align-items:start">
+      return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:11px;overflow-x:auto;padding-bottom:10px;align-items:start">
         ${visible.map(name => {
           const color  = assigneeColor(name, order);
           const w = gWeek[name]||[], c = gCarry[name]||[], n = gNo[name]||[];
@@ -2451,19 +2452,19 @@
             ondrop="this.style.background='';dropTaskOnAssignee(event,'${jsArg(name)}')"` : '';
           return `
           <div class="glass" style="border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
-            <div style="position:relative;padding:12px 13px;border-bottom:1px solid var(--card-b);display:flex;align-items:center;gap:9px">
+            <div style="position:relative;padding:9px 10px;border-bottom:1px solid var(--card-b);display:flex;align-items:center;gap:7px">
               <div style="position:absolute;top:0;left:0;right:0;height:2.5px;background:linear-gradient(90deg,${color},transparent)"></div>
-              <div style="width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;background:${color}22;color:${color}">${initialsOf(name)}</div>
+              <div style="width:23px;height:23px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;background:${color}22;color:${color}">${initialsOf(name)}</div>
               <div style="min-width:0">
-                <div style="font-size:12px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(name)}${extern?` <span title="Responsable fuera del equipo configurado" style="color:var(--warn)">⚠</span>`:''}</div>
-                <div style="font-size:9.5px;color:var(--t3);font-weight:600;margin-top:1px">${total} tarea${total!==1?'s':''}${done?` · ${done} ✓`:''}</div>
+                <div style="font-size:11.5px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(name)}${extern?` <span title="Responsable fuera del equipo configurado" style="color:var(--warn)">⚠</span>`:''}</div>
+                <div style="font-size:9px;color:var(--t3);font-weight:600;margin-top:1px">${total} tarea${total!==1?'s':''}${done?` · ${done} ✓`:''}</div>
               </div>
               ${canEdit() ? `<button onclick="openTaskModal(null,'${jsArg(name === UNASSIGNED ? '' : name)}','${ymd(defDue)}')" title="Nueva tarea para ${esc(name)}"
-                style="margin-left:auto;width:24px;height:24px;border-radius:7px;border:1px solid var(--b1);background:transparent;color:var(--t3);cursor:pointer;font-size:15px;line-height:1;font-family:inherit;flex-shrink:0;transition:all 0.15s"
+                style="margin-left:auto;width:21px;height:21px;border-radius:6px;border:1px solid var(--b1);background:transparent;color:var(--t3);cursor:pointer;font-size:14px;line-height:1;font-family:inherit;flex-shrink:0;transition:all 0.15s"
                 onmouseover="this.style.borderColor='var(--acc)';this.style.color='var(--acc)'"
                 onmouseout="this.style.borderColor='var(--b1)';this.style.color='var(--t3)'">+</button>` : ''}
             </div>
-            <div style="padding:10px;display:flex;flex-direction:column;gap:8px;max-height:62vh;overflow-y:auto;transition:background 0.15s" ${dropAttrs}>
+            <div style="padding:8px;display:flex;flex-direction:column;gap:6px;max-height:62vh;overflow-y:auto;transition:background 0.15s" ${dropAttrs}>
               ${w.length ? w.map(t => taskCard(t,'week')).join('')
                          : `<div style="padding:16px 4px;text-align:center;font-size:10.5px;color:var(--t3)">Sin tareas esta semana</div>`}
               ${c.length ? colDivider('ARRASTRE','var(--danger)') + c.map(t => taskCard(t,'carry')).join('') : ''}
@@ -2511,7 +2512,7 @@
                 <td style="padding:12px 16px;color:var(--t2);max-width:250px"><span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(t.next_step)||'—'}</span></td>
                 <td style="padding:12px 16px"><span style="padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:0.05em;background:${prioC}22;color:${prioC}">${TASK_PRIO_LABEL[t.priority]||esc(t.priority)}</span></td>
                 <td style="padding:12px 16px">${statusChipHtml(t)}</td>
-                <td style="padding:12px 16px;color:${overdue?'var(--danger)':'var(--t2)'};font-weight:${overdue?'600':'400'};white-space:nowrap">${overdue?'⚠ ':''}${t.due_date?shortDate(t.due_date):'—'}</td>
+                <td style="padding:12px 16px;color:${overdue?'var(--danger)':'var(--t1)'};font-weight:${overdue?'700':'600'};font-family:var(--font-mono);white-space:nowrap">${overdue?'⚠ ':''}${t.due_date?dmy(t.due_date):'—'}</td>
                 ${canEdit() ? `<td style="padding:12px 16px;white-space:nowrap;text-align:right">
                   <button onclick="openTaskModal('${t.id}')" style="padding:4px 9px;border-radius:6px;border:1px solid var(--b1);background:transparent;color:var(--t2);cursor:pointer;font-size:11px;font-family:inherit;margin-right:4px;transition:all 0.15s"
                     onmouseover="this.style.borderColor='var(--acc)';this.style.color='var(--acc)'" onmouseout="this.style.borderColor='var(--b1)';this.style.color='var(--t2)'">Editar</button>
@@ -2550,7 +2551,7 @@
       ].filter(s => s.show);
 
       return `
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:12px">
           <p class="sec-label" style="color:var(--t3);margin:0">PLANIFICACIÓN DEL EQUIPO</p>
           <div style="display:flex;align-items:center;gap:6px">
             <button onclick="exportTareasCSV()" title="Exportar a CSV / Excel" style="display:flex;align-items:center;gap:5px;padding:5px 11px;border-radius:8px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(16,185,129,0.18)'" onmouseout="this.style.background='rgba(16,185,129,0.08)'">
@@ -2565,7 +2566,7 @@
           </div>
         </div>
 
-        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
           <div class="glass-sm" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:12px">
             <button onclick="shiftTaskWeek(-1)" title="Semana anterior" style="width:28px;height:28px;border-radius:8px;border:1px solid var(--b1);background:transparent;color:var(--t2);cursor:pointer;font-size:15px;line-height:1;font-family:inherit;transition:all 0.15s" onmouseover="this.style.borderColor='var(--acc)';this.style.color='var(--acc)'" onmouseout="this.style.borderColor='var(--b1)';this.style.color='var(--t2)'">‹</button>
             <div style="min-width:196px;text-align:center">
@@ -2577,17 +2578,17 @@
           </div>
 
           ${stats.map(s => `
-            <div class="glass" style="border-radius:10px;padding:9px 16px;display:flex;align-items:center;gap:10px;position:relative;overflow:hidden;min-width:132px">
+            <div class="glass" style="border-radius:9px;padding:6px 12px;display:flex;align-items:center;gap:8px;position:relative;overflow:hidden;min-width:108px">
               <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,${s.color},transparent)"></div>
-              <div style="width:26px;height:26px;border-radius:7px;background:${s.color}22;display:flex;align-items:center;justify-content:center;color:${s.color};flex-shrink:0">${s.icon}</div>
+              <div style="width:21px;height:21px;border-radius:6px;background:${s.color}22;display:flex;align-items:center;justify-content:center;color:${s.color};flex-shrink:0">${s.icon}</div>
               <div>
-                <div style="font-size:19px;font-weight:800;color:var(--t1);line-height:1;letter-spacing:-0.02em">${s.val}</div>
-                <div style="font-size:10px;color:var(--t3);margin-top:2px;font-weight:600;letter-spacing:0.04em">${s.label}</div>
+                <div style="font-size:15px;font-weight:800;color:var(--t1);line-height:1;letter-spacing:-0.02em">${s.val}</div>
+                <div style="font-size:9px;color:var(--t3);margin-top:1px;font-weight:600;letter-spacing:0.04em">${s.label}</div>
               </div>
             </div>`).join('')}
         </div>
 
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;align-items:center">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
           <div style="display:flex;gap:4px;padding:3px;border-radius:99px;background:var(--row-b);border:1px solid var(--pill-br)">
             ${TASK_VIEWS.map(v => pillBtn(v.label, taskView===v.id, `setTaskView('${v.id}')`)).join('')}
           </div>
@@ -2659,6 +2660,10 @@
                 </div>
               </div>
             </div>
+            <div id="task-history" style="display:none;margin-top:18px;padding-top:14px;border-top:1px solid var(--b1)">
+              <label style="${labelCss}">HISTORIAL</label>
+              <div id="task-history-list" style="display:flex;flex-direction:column;max-height:150px;overflow-y:auto;font-size:11px"></div>
+            </div>
             <div id="task-modal-error" style="display:none;margin-top:12px;padding:8px 12px;border-radius:8px;background:rgba(239,68,68,0.12);color:#FCA5A5;font-size:12px"></div>
             <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:24px">
               <button onclick="closeTaskModal()"
@@ -2668,6 +2673,44 @@
             </div>
           </div>
         </div>`;
+    }
+
+    // Historial de cambios de estado — status_log ya existía para projects/
+    // orders/installations (vía n8n con service_role); acá lo reusamos para
+    // tareas. Solo cambios de estado (no reasignaciones — así se pidió: "cuando
+    // completo la tarea"). Fire-and-forget: un fallo acá no bloquea la acción
+    // principal del usuario, solo se loguea en consola.
+    async function logTaskStatusChange(id, prevStatus, newStatus) {
+      if (!prevStatus || prevStatus === newStatus) return;
+      const task = D.tasks.find(x => x.id === id);
+      const { error } = await sb.from('status_log').insert({
+        entity_type: 'task',
+        entity_id: id,
+        team: task?.team || 'netTime',
+        previous_status: prevStatus,
+        new_status: newStatus,
+        source: 'manual',
+        created_by: myProfile?.full_name || myProfile?.email || null,
+      });
+      if (error) console.error('No se pudo guardar el historial de la tarea:', error.message);
+    }
+
+    async function loadTaskHistory(id) {
+      const wrap = document.getElementById('task-history');
+      const list = document.getElementById('task-history-list');
+      if (!wrap || !list) return;
+      const { data, error } = await sb.from('status_log')
+        .select('previous_status,new_status,created_by,created_at')
+        .eq('entity_type', 'task').eq('entity_id', id)
+        .order('created_at', { ascending: false })
+        .limit(15);
+      if (error || !data || !data.length) { wrap.style.display = 'none'; list.innerHTML = ''; return; }
+      wrap.style.display = 'block';
+      list.innerHTML = data.map(l => `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--b1)">
+          <span style="color:var(--t2)">${TASK_STATUS_LABEL[l.previous_status]||esc(l.previous_status)||'—'} <span style="color:var(--t3)">→</span> <b style="color:var(--t1)">${TASK_STATUS_LABEL[l.new_status]||esc(l.new_status)}</b></span>
+          <span style="color:var(--t3);white-space:nowrap;font-size:10px">${esc(l.created_by||'—')} · ${fmtDate(l.created_at)}</span>
+        </div>`).join('');
     }
 
     // ── Handlers ───────────────────────────────────────────────────────
@@ -2690,6 +2733,11 @@
       document.getElementById('task-prio-input').value     = t?.priority    || 'media';
       document.getElementById('task-status-input').value   = t?.status      || 'pendiente';
       document.getElementById('task-due-input').value      = t ? (t.due_date || '') : presetDue;
+      if (isEdit) { loadTaskHistory(id); }
+      else {
+        document.getElementById('task-history').style.display = 'none';
+        document.getElementById('task-history-list').innerHTML = '';
+      }
       modal.style.display = 'flex';
       setTimeout(() => document.getElementById('task-title-input')?.focus(), 60);
     };
@@ -2710,6 +2758,7 @@
       btn.textContent = 'Guardando…'; btn.disabled = true;
 
       const rawAssignee = document.getElementById('task-assignee-input').value.trim();
+      const prevStatus  = id ? D.tasks.find(x => x.id === id)?.status : null;
       const payload = {
         title,
         next_step:   document.getElementById('task-next-input').value.trim() || null,
@@ -2731,6 +2780,7 @@
         btn.textContent = 'Guardar'; btn.disabled = false;
         return;
       }
+      if (id) await logTaskStatusChange(id, prevStatus, payload.status);
       btn.textContent = 'Guardar'; btn.disabled = false;
       closeTaskModal();
       await loadAll();
@@ -2738,9 +2788,11 @@
 
     window.cycleTaskStatus = async function(id, nextStatus) {
       if (!requireAdmin()) return;
+      const prevStatus = D.tasks.find(x => x.id === id)?.status;
       const { error } = await sb.from('tasks')
         .update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', id);
       if (error) { showError(error.message); return; }
+      await logTaskStatusChange(id, prevStatus, nextStatus);
       await loadAll();
     };
 
@@ -2757,9 +2809,12 @@
     // en_progreso). Al destildar vuelve a pendiente, igual que hace el ciclo.
     window.toggleTaskDone = async function(id, checked) {
       if (!requireAdmin()) return;
+      const prevStatus = D.tasks.find(x => x.id === id)?.status;
+      const newStatus  = checked ? 'completado' : 'pendiente';
       const { error } = await sb.from('tasks')
-        .update({ status: checked ? 'completado' : 'pendiente', updated_at: new Date().toISOString() }).eq('id', id);
+        .update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', id);
       if (error) { showError(error.message); return; }
+      await logTaskStatusChange(id, prevStatus, newStatus);
       await loadAll();
     };
 
