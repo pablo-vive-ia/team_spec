@@ -390,6 +390,7 @@
     let activeTaskAssignee = 'Todos';
     let taskWeekOffset     = 0;   // 0 = semana actual, -1 anterior, +1 siguiente
     let taskView           = localStorage.getItem('spec-task-view') || 'tablero';
+    let taskGroupBy        = localStorage.getItem('spec-task-group') || 'assignee'; // 'assignee' | 'priority' — solo aplica a la vista Tablero
     let activeProjectGroup  = 'Todos';
     let activeProjectScope  = 'activos'; // 'activos' | 'todos' — completado/cancelado nunca se muestran
     let activeTicketProduct = 'Todos';
@@ -2223,14 +2224,16 @@
     // ── SECCIÓN: PLANIFICACIÓN SEMANAL DEL EQUIPO ──────────────────────
     const TASK_STATUS_CYCLE = { pendiente:'en_progreso', en_progreso:'completado', completado:'pendiente' };
     const TASK_STATUS_LABEL = { pendiente:'Pendiente', en_progreso:'En progreso', completado:'Completado', cancelado:'Cancelado' };
-    const TASK_STATUS_BG    = { pendiente:'rgba(156,163,175,0.15)', en_progreso:'rgba(59,107,247,0.18)', completado:'rgba(34,197,94,0.15)', cancelado:'rgba(107,114,128,0.10)' };
-    const TASK_STATUS_FG    = { pendiente:'var(--t2)', en_progreso:'var(--acc)', completado:'var(--success)', cancelado:'var(--t3)' };
+    const TASK_STATUS_BG    = { pendiente:'rgba(245,158,11,0.15)', en_progreso:'rgba(59,107,247,0.18)', completado:'rgba(16,185,129,0.15)', cancelado:'rgba(239,68,68,0.15)' };
+    const TASK_STATUS_FG    = { pendiente:'var(--warn)', en_progreso:'var(--acc)', completado:'var(--success)', cancelado:'var(--danger)' };
     const TASK_PRIO_COLOR   = { baja:'var(--success)', media:'var(--acc)', alta:'var(--warn)', urgente:'var(--danger)' };
     const TASK_PRIO_LABEL   = { baja:'Baja', media:'Media', alta:'Alta', urgente:'Urgente' };
     const TASK_PRIO_ORDER   = { urgente:0, alta:1, media:2, baja:3 };
     const TASK_ST_ORDER     = { pendiente:0, en_progreso:1, completado:2, cancelado:3 };
     const TASK_STATUSES_F   = ['Todos','pendiente','en_progreso','completado','cancelado'];
     const TASK_VIEWS        = [{id:'tablero',label:'Tablero'},{id:'tabla',label:'Tabla'}];
+    const TASK_GROUPS       = [{id:'assignee',label:'Por miembro'},{id:'priority',label:'Por prioridad'}];
+    const TASK_PRIO_KEYS    = ['urgente','alta','media','baja']; // orden fijo de columnas al agrupar por prioridad
 
     // Equipo canónico: define las columnas del tablero. Un miembro sin tareas
     // igual tiene columna (columna vacía = señal útil en la reunión semanal).
@@ -2401,7 +2404,15 @@
       </div>`;
     }
 
-    function renderTareasTablero(b, order, filterAssignee) {
+    // Despachador: el tablero se puede agrupar por persona (default) o por
+    // prioridad — decisión del usuario, misma semana visible para las dos.
+    function renderTareasTablero(b, order, filterAssignee, groupBy) {
+      return groupBy === 'priority'
+        ? renderTareasTableroPorPrioridad(b)
+        : renderTareasTableroPorMiembro(b, order, filterAssignee);
+    }
+
+    function renderTareasTableroPorMiembro(b, order, filterAssignee) {
       const groupsOf = list => {
         const m = {};
         for (const t of list) { const a = canonAssignee(t.assignee); (m[a] = m[a] || []).push(t); }
@@ -2444,6 +2455,52 @@
                 <div style="font-size:9px;color:var(--t3);font-weight:600;margin-top:1px">${total} tarea${total!==1?'s':''}${done?` · ${done} ✓`:''}</div>
               </div>
               ${canEdit() ? `<button onclick="openTaskModal(null,'${jsArg(name === UNASSIGNED ? '' : name)}','${ymd(defDue)}')" title="Nueva tarea para ${esc(name)}"
+                style="margin-left:auto;width:21px;height:21px;border-radius:6px;border:1px solid var(--b1);background:transparent;color:var(--t3);cursor:pointer;font-size:14px;line-height:1;font-family:inherit;flex-shrink:0;transition:all 0.15s"
+                onmouseover="this.style.borderColor='var(--acc)';this.style.color='var(--acc)'"
+                onmouseout="this.style.borderColor='var(--b1)';this.style.color='var(--t3)'">+</button>` : ''}
+            </div>
+            <div style="padding:8px;display:flex;flex-direction:column;gap:6px;max-height:62vh;overflow-y:auto;transition:background 0.15s" ${dropAttrs}>
+              ${w.length ? w.map(t => taskCard(t,'week')).join('')
+                         : `<div style="padding:16px 4px;text-align:center;font-size:10.5px;color:var(--t3)">Sin tareas esta semana</div>`}
+              ${c.length ? colDivider('ARRASTRE','var(--danger)') + c.map(t => taskCard(t,'carry')).join('') : ''}
+              ${n.length ? colDivider('SIN FECHA','var(--t3)')    + n.map(t => taskCard(t,'nodate')).join('') : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    }
+
+    // Columnas fijas (urgente→baja), siempre las 4 visibles — mismo criterio que
+    // las columnas de persona (una prioridad sin tareas también es información).
+    function renderTareasTableroPorPrioridad(b) {
+      const groupsOf = list => {
+        const m = {};
+        for (const t of list) { const p = t.priority || 'media'; (m[p] = m[p] || []).push(t); }
+        return m;
+      };
+      const gWeek = groupsOf(b.inWeek), gCarry = groupsOf(b.carry), gNo = groupsOf(b.noDate);
+      const defDue = new Date(b.ws); defDue.setDate(defDue.getDate() + 4);
+
+      return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:11px;overflow-x:auto;padding-bottom:10px;align-items:start">
+        ${TASK_PRIO_KEYS.map(p => {
+          const color = TASK_PRIO_COLOR[p];
+          const w = gWeek[p]||[], c = gCarry[p]||[], n = gNo[p]||[];
+          const total = w.length + c.length + n.length;
+          const done  = w.filter(t => t.status === 'completado').length;
+          // Drop zone: soltar una tarjeta acá cambia su prioridad (solo admin)
+          const dropAttrs = canEdit() ? `ondragover="event.preventDefault();this.style.background='rgba(59,107,247,0.06)'"
+            ondragleave="this.style.background=''"
+            ondrop="this.style.background='';dropTaskOnPriority(event,'${p}')"` : '';
+          return `
+          <div class="glass" style="border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+            <div style="position:relative;padding:9px 10px;border-bottom:1px solid var(--card-b);display:flex;align-items:center;gap:7px">
+              <div style="position:absolute;top:0;left:0;right:0;height:2.5px;background:linear-gradient(90deg,${color},transparent)"></div>
+              <div style="width:23px;height:23px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;background:${color}22;color:${color}">${TASK_PRIO_LABEL[p][0]}</div>
+              <div style="min-width:0">
+                <div style="font-size:11.5px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${TASK_PRIO_LABEL[p]}</div>
+                <div style="font-size:9px;color:var(--t3);font-weight:600;margin-top:1px">${total} tarea${total!==1?'s':''}${done?` · ${done} ✓`:''}</div>
+              </div>
+              ${canEdit() ? `<button onclick="openTaskModal(null,'','${ymd(defDue)}','${p}')" title="Nueva tarea ${TASK_PRIO_LABEL[p]}"
                 style="margin-left:auto;width:21px;height:21px;border-radius:6px;border:1px solid var(--b1);background:transparent;color:var(--t3);cursor:pointer;font-size:14px;line-height:1;font-family:inherit;flex-shrink:0;transition:all 0.15s"
                 onmouseover="this.style.borderColor='var(--acc)';this.style.color='var(--acc)'"
                 onmouseout="this.style.borderColor='var(--b1)';this.style.color='var(--t3)'">+</button>` : ''}
@@ -2576,6 +2633,9 @@
           <div style="display:flex;gap:4px;padding:3px;border-radius:99px;background:var(--row-b);border:1px solid var(--pill-br)">
             ${TASK_VIEWS.map(v => pillBtn(v.label, taskView===v.id, `setTaskView('${v.id}')`)).join('')}
           </div>
+          ${taskView === 'tablero' ? `<div style="display:flex;gap:4px;padding:3px;border-radius:99px;background:var(--row-b);border:1px solid var(--pill-br)">
+            ${TASK_GROUPS.map(g => pillBtn(g.label, taskGroupBy===g.id, `setTaskGroupBy('${g.id}')`)).join('')}
+          </div>` : ''}
           <div style="display:flex;gap:4px;padding:3px;border-radius:99px;background:var(--row-b);border:1px solid var(--pill-br)">
             ${TASK_STATUSES_F.map(st => pillBtn(st==='Todos'?'Todos':TASK_STATUS_LABEL[st], activeTaskStatus===st, `setTaskStatusFilter('${st}')`)).join('')}
           </div>
@@ -2585,7 +2645,7 @@
           <span style="font-size:11px;color:var(--t3)">${b.all.length} en vista · ${D.tasks.length} total</span>
         </div>
 
-        ${taskView === 'tablero' ? renderTareasTablero(b, order, activeTaskAssignee) : renderTareasTabla(b)}
+        ${taskView === 'tablero' ? renderTareasTablero(b, order, activeTaskAssignee, taskGroupBy) : renderTareasTabla(b)}
         ${canEdit() ? taskModalHtml() : ''}
       `;
     }
@@ -2701,7 +2761,7 @@
     // Doble capa: la UI omite los controles si !canEdit(), y cada handler
     // guardea igual por si alguien los llama desde la consola. El enforcement
     // real es RLS — esto solo evita errores crudos de Supabase en pantalla.
-    window.openTaskModal = function(id, presetAssignee = '', presetDue = '') {
+    window.openTaskModal = function(id, presetAssignee = '', presetDue = '', presetPriority = '') {
       if (!requireAdmin()) return;
       const modal = document.getElementById('task-modal');
       if (!modal) return;
@@ -2714,7 +2774,7 @@
       document.getElementById('task-next-input').value     = t?.next_step   || '';
       document.getElementById('task-desc-input').value     = t?.description || '';
       document.getElementById('task-assignee-input').value = t ? (t.assignee || '') : presetAssignee;
-      document.getElementById('task-prio-input').value     = t?.priority    || 'media';
+      document.getElementById('task-prio-input').value     = t ? (t.priority || 'media') : (presetPriority || 'media');
       document.getElementById('task-status-input').value   = t?.status      || 'pendiente';
       document.getElementById('task-due-input').value      = t ? (t.due_date || '') : presetDue;
       if (isEdit) { loadTaskHistory(id); }
@@ -2822,6 +2882,22 @@
       await reassignTask(id, personName);
     };
 
+    // Cambiar prioridad — desde un drop en el tablero agrupado por prioridad.
+    window.reprioritizeTask = async function(id, priority) {
+      if (!requireAdmin()) return;
+      const { error } = await sb.from('tasks')
+        .update({ priority, updated_at: new Date().toISOString() }).eq('id', id);
+      if (error) { showError(error.message); return; }
+      await loadAll();
+    };
+
+    window.dropTaskOnPriority = async function(event, priority) {
+      event.preventDefault();
+      const id = event.dataTransfer.getData('text/plain');
+      if (!id) return;
+      await reprioritizeTask(id, priority);
+    };
+
     window.setTaskStatusFilter   = function(s) { activeTaskStatus   = s; render(); };
     window.setTaskAssigneeFilter = function(a) { activeTaskAssignee = a; render(); };
     window.shiftTaskWeek         = function(d) { taskWeekOffset    += d; render(); };
@@ -2829,6 +2905,11 @@
     window.setTaskView           = function(v) {
       taskView = v;
       localStorage.setItem('spec-task-view', v);
+      render();
+    };
+    window.setTaskGroupBy        = function(g) {
+      taskGroupBy = g;
+      localStorage.setItem('spec-task-group', g);
       render();
     };
 
