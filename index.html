@@ -157,6 +157,11 @@
     input::placeholder { color: var(--t3); }
     input:focus, select:focus { outline: none; }
 
+    /* Ícono del calendario nativo (type=date): sin esto el navegador lo pinta
+       oscuro por default y queda casi invisible sobre fondo oscuro. */
+    input[type="date"] { color-scheme: dark; }
+    body.light input[type="date"] { color-scheme: light; }
+
     select option { background-color: #111827; color: #F0F6FF; }
     body.light select option { background-color: #F8FAFC; color: #0F172A; }
 
