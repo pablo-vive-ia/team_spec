@@ -444,7 +444,10 @@
       return false;
     }
 
-    const STATUS_ABIERTOS = ['abierto', 'nuevo', 'open', 'new'];
+    // 'pendiente' agregado para que coincida con la lista que usa la reconciliación
+    // de huérfanos en el workflow n8n (Comparar y Preparar) — evita que un ticket
+    // en un estado "Pendiente..." de Zammad desaparezca de Abiertos en el dashboard.
+    const STATUS_ABIERTOS = ['abierto', 'nuevo', 'open', 'new', 'pendiente'];
     function isTicketAbierto(t) {
       const s = (t.status || '').toLowerCase();
       return STATUS_ABIERTOS.some(x => s.includes(x));
