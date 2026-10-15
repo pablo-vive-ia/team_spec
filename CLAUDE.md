@@ -56,6 +56,8 @@ Zoho API ────┘                                          │
 
 **`D` object:** `{ projects, installations, tickets, orders, log, tasks, activities }`
 
+**⚠️ Paginación en `loadAll()` — bug real, corregido 2026-10-15.** Supabase/PostgREST limita cualquier `select()` sin paginar explícitamente a 1000 filas por request (no hay "sin límite" en el cliente JS). `tickets` ya supera las 3.400 filas y `team_activities` las 1.300 — sin paginar, `loadAll()` traía solo las 1000 más recientes por `updated_at`/`log_date` y **descartaba el resto en silencio, sin error** (PostgREST no avisa, simplemente trunca). Detectado porque el usuario reportó tickets de 2025 faltantes del cliente Unicon: 20 de sus 25 tickets tenían `updated_at` viejo y quedaban fuera de esas 1000 filas, invisibles en toda la sección (ni el filtro de período los salvaba — nunca llegaban a `D.tickets`). Fix: `fetchAllPaged(buildQuery, pageSize=1000)` pagina con `.range()` en loop hasta que una página vuelve con menos filas que `pageSize`; se usa para las 6 tablas que se cargan completas (`projects`, `installations`, `tickets`, `orders`, `tasks`, `team_activities`). `status_log` queda **deliberadamente sin paginar** (`.limit(200)`) — es a propósito, es el feed de "últimos movimientos" de Resumen/Historial, no todo el histórico. `buildQuery` se pasa como función (no como query ya armada) porque un builder de supabase-js resuelto no se puede reutilizar para pedir otra página.
+
 ### Theming (dark/light mode)
 
 CSS variables in `:root` (dark defaults) overridden in `body.light`. Key variables:

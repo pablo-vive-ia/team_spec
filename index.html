@@ -467,16 +467,37 @@
     const TICKET_SCOPE_TITLES = { abiertos:'TICKETS ABIERTOS', cerrados:'TICKETS CERRADOS', todos:'TODOS LOS TICKETS' };
 
     // ── CARGA ──────────────────────────────────────────────────────────
+    // Supabase/PostgREST cae a un límite de 1000 filas por request si no se pagina
+    // explícitamente — el cliente JS no tiene un "sin límite". Con `tickets` en
+    // 3400+ filas y `team_activities` en 1300+, un select() sin paginar devolvía
+    // solo las 1000 más recientes por updated_at/log_date, dejando afuera en
+    // silencio (sin error) cualquier registro viejo sin tocar recientemente.
+    // Bug real detectado 2026-10-15 (usuario reportó tickets de 2025 faltantes
+    // del cliente Unicon: 20 de sus 25 tickets estaban invisibles por esto).
+    // buildQuery debe devolver una query NUEVA en cada llamada (no reutilizar un
+    // builder ya resuelto) — por eso se pasa como función, no como valor.
+    async function fetchAllPaged(buildQuery, pageSize = 1000) {
+      let from = 0, rows = [];
+      while (true) {
+        const { data, error } = await buildQuery().range(from, from + pageSize - 1);
+        if (error) return { data: rows, error };
+        rows = rows.concat(data || []);
+        if (!data || data.length < pageSize) break;
+        from += pageSize;
+      }
+      return { data: rows, error: null };
+    }
+
     async function loadAll(animated = false) {
       const opts = { ascending: false };
       const [p,i,t,o,l,tk,ac] = await Promise.all([
-        sb.from('projects').select('*').order('updated_at',opts),
-        sb.from('installations').select('*').order('updated_at',opts),
-        sb.from('tickets').select('*').not('group_name','ilike','%pedido%').order('updated_at',opts),
-        sb.from('orders').select('*').order('updated_at',opts),
-        sb.from('status_log').select('*').order('created_at',opts).limit(200),
-        sb.from('tasks').select('*').order('created_at',opts),
-        sb.from('team_activities').select('*').order('log_date',opts),
+        fetchAllPaged(() => sb.from('projects').select('*').order('updated_at',opts)),
+        fetchAllPaged(() => sb.from('installations').select('*').order('updated_at',opts)),
+        fetchAllPaged(() => sb.from('tickets').select('*').not('group_name','ilike','%pedido%').order('updated_at',opts)),
+        fetchAllPaged(() => sb.from('orders').select('*').order('updated_at',opts)),
+        sb.from('status_log').select('*').order('created_at',opts).limit(200), // acotado a propósito: feed de "últimos movimientos", no paginar
+        fetchAllPaged(() => sb.from('tasks').select('*').order('created_at',opts)),
+        fetchAllPaged(() => sb.from('team_activities').select('*').order('log_date',opts)),
       ]);
       const err = [p,i,t,o,l,tk,ac].find(r => r.error);
       if (err?.error) { console.error(err.error); showError(err.error.message); return; }
