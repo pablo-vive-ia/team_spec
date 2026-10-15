@@ -926,6 +926,27 @@
       return 'Otro';
     }
 
+    // Campo de fecha "híbrido": se puede escribir dd/mm/aaaa a mano o abrir el
+    // calendario nativo con el ícono — pedido explícito del usuario para el
+    // filtro Desde/Hasta de Tickets (no alcanzaba con el <input type="date"> solo).
+    function ticketRangeField(label, iso, textSetter, pickerSetter) {
+      const txt = iso ? dmy(iso) : '';
+      return `
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:var(--t3)">${label}</span>
+          <div style="position:relative;display:inline-flex;align-items:center">
+            <input type="text" value="${esc(txt)}" placeholder="dd/mm/aaaa" maxlength="10" inputmode="numeric"
+              onchange="${textSetter}(this.value)" onkeydown="if(event.key==='Enter')this.blur()"
+              style="background:var(--s1);border:1px solid var(--pill-br);color:var(--t1);font-size:11px;font-weight:600;border-radius:8px;padding:3px 24px 3px 8px;font-family:var(--font-mono);width:78px;outline:none">
+            <input type="date" value="${esc(iso)}" onchange="${pickerSetter}(this.value)" title="Elegir del calendario"
+              style="position:absolute;right:1px;top:1px;bottom:1px;width:20px;opacity:0;cursor:pointer;padding:0;border:none;background:transparent">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;right:6px;pointer-events:none">
+              <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+          </div>
+        </div>`;
+    }
+
     const TICKET_PROD_ACCENT = {
       'SPECManager': 'rgba(139,92,246,0.22)',
       'xTime':       'rgba(59,107,247,0.22)',
@@ -1053,13 +1074,9 @@
               }).join('')}
             </div>
             ${activeTicketPeriod==='rango' ? `
-            <div style="display:flex;align-items:center;gap:6px">
-              <span style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:var(--t3)">DESDE</span>
-              <input type="date" value="${esc(ticketDateFrom)}" onchange="setTicketDateFrom(this.value)"
-                style="background:var(--s1);border:1px solid var(--pill-br);color:var(--t1);font-size:11px;font-weight:600;border-radius:8px;padding:3px 8px;font-family:inherit;cursor:pointer;outline:none">
-              <span style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:var(--t3)">HASTA</span>
-              <input type="date" value="${esc(ticketDateTo)}" onchange="setTicketDateTo(this.value)"
-                style="background:var(--s1);border:1px solid var(--pill-br);color:var(--t1);font-size:11px;font-weight:600;border-radius:8px;padding:3px 8px;font-family:inherit;cursor:pointer;outline:none">
+            <div style="display:flex;align-items:center;gap:10px">
+              ${ticketRangeField('DESDE', ticketDateFrom, 'setTicketDateFromText', 'setTicketDateFrom')}
+              ${ticketRangeField('HASTA', ticketDateTo, 'setTicketDateToText', 'setTicketDateTo')}
             </div>` : ''}
             <div style="margin-left:auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
               ${[
@@ -1654,10 +1671,18 @@
     // Convierte "DD/MM/YYYY" o "YYYY-MM-DD" al formato que espera <input type="date">
     function toDateInput(s) {
       if (!s) return '';
-      const m1 = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-      if (m1) return `${m1[3]}-${m1[2]}-${m1[1]}`;
+      const m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (m1) return `${m1[3]}-${m1[2].padStart(2,'0')}-${m1[1].padStart(2,'0')}`;
       if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
       return '';
+    }
+    // true si "YYYY-MM-DD" es una fecha real (rechaza cosas como 31/02) — toDateInput()
+    // solo matchea el formato con regex, no valida el calendario.
+    function isValidISODate(iso) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+      if (!m) return false;
+      const d = new Date(+m[1], +m[2]-1, +m[3]);
+      return d.getFullYear()===+m[1] && d.getMonth()===+m[2]-1 && d.getDate()===+m[3];
     }
 
     // Formatea YYYY-MM-DD para mostrar en tabla; fallback al valor crudo (registros legacy)
@@ -1923,6 +1948,25 @@
     };
     window.setTicketDateTo = function(d) {
       ticketDateTo = d;
+      activeTicketPeriod = 'rango';
+      render();
+    };
+    // Variante "escrita a mano" (dd/mm/aaaa) de las dos de arriba — si el texto no
+    // es una fecha válida no se aplica (se deja lo tipeado tal cual para corregir,
+    // sin re-render que lo borre).
+    window.setTicketDateFromText = function(text) {
+      if (!text) { ticketDateFrom = ''; activeTicketPeriod = 'rango'; render(); return; }
+      const iso = toDateInput(text);
+      if (!isValidISODate(iso)) { alert('Fecha inválida — usá el formato dd/mm/aaaa'); return; }
+      ticketDateFrom = iso;
+      activeTicketPeriod = 'rango';
+      render();
+    };
+    window.setTicketDateToText = function(text) {
+      if (!text) { ticketDateTo = ''; activeTicketPeriod = 'rango'; render(); return; }
+      const iso = toDateInput(text);
+      if (!isValidISODate(iso)) { alert('Fecha inválida — usá el formato dd/mm/aaaa'); return; }
+      ticketDateTo = iso;
       activeTicketPeriod = 'rango';
       render();
     };
