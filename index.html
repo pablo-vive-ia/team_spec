@@ -401,6 +401,8 @@
     let activeTicketProduct = 'Todos';
     let activeTicketGroup   = 'Todos';
     let activeTicketPeriod  = 'mes';
+    let ticketDateFrom      = ''; // 'YYYY-MM-DD' — solo aplica cuando activeTicketPeriod === 'rango'
+    let ticketDateTo        = '';
     let activeTicketNivel   = 'Todos';
     let activeTicketStatus  = 'Todos';
     let activeTicketScope   = 'abiertos'; // 'abiertos' | 'cerrados' | 'todos' — default abiertos+nuevos
@@ -936,7 +938,7 @@
     function renderTickets() {
       const PERIODS = [
         {id:'hoy',label:'Hoy'},{id:'semana',label:'Esta semana'},{id:'mes',label:'Este mes'},
-        {id:'mes_ant',label:'Mes anterior'},{id:'3m',label:'3 meses'},{id:'6m',label:'6 meses'},{id:'anio',label:'Este año'},
+        {id:'mes_ant',label:'Mes anterior'},{id:'anio',label:'Este año'},{id:'rango',label:'Desde / hasta'},
       ];
       function periodStart(p) {
         const n=new Date();
@@ -944,13 +946,13 @@
         if(p==='semana') { const d=new Date(n); d.setDate(d.getDate()-((d.getDay()+6)%7)); d.setHours(0,0,0,0); return d; }
         if(p==='mes')    return new Date(n.getFullYear(),n.getMonth(),1);
         if(p==='mes_ant')return new Date(n.getFullYear(),n.getMonth()-1,1);
-        if(p==='3m')     return new Date(n.getFullYear(),n.getMonth()-3,1);
-        if(p==='6m')     return new Date(n.getFullYear(),n.getMonth()-6,1);
         if(p==='anio')   return new Date(n.getFullYear(),0,1);
+        if(p==='rango')  return ticketDateFrom ? new Date(ticketDateFrom+'T00:00:00') : null;
         return null;
       }
       function periodEnd(p) {
         if(p==='mes_ant'){const n=new Date();return new Date(n.getFullYear(),n.getMonth(),0,23,59,59);}
+        if(p==='rango')  return ticketDateTo ? new Date(ticketDateTo+'T23:59:59') : null;
         return null;
       }
 
@@ -1050,6 +1052,15 @@
                 return `<button onclick="setTicketPeriod('${p.id}')" style="padding:4px 11px;border-radius:8px;font-size:11px;font-weight:${on?'700':'500'};cursor:pointer;font-family:inherit;transition:all 0.15s;border:1px solid ${on?'rgba(59,107,247,0.35)':'transparent'};background:${on?'rgba(59,107,247,0.14)':'transparent'};color:${on?'#93C5FD':'var(--t3)'}">${p.label}</button>`;
               }).join('')}
             </div>
+            ${activeTicketPeriod==='rango' ? `
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:var(--t3)">DESDE</span>
+              <input type="date" value="${esc(ticketDateFrom)}" onchange="setTicketDateFrom(this.value)"
+                style="background:var(--s1);border:1px solid var(--pill-br);color:var(--t1);font-size:11px;font-weight:600;border-radius:8px;padding:3px 8px;font-family:inherit;cursor:pointer;outline:none">
+              <span style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:var(--t3)">HASTA</span>
+              <input type="date" value="${esc(ticketDateTo)}" onchange="setTicketDateTo(this.value)"
+                style="background:var(--s1);border:1px solid var(--pill-br);color:var(--t1);font-size:11px;font-weight:600;border-radius:8px;padding:3px 8px;font-family:inherit;cursor:pointer;outline:none">
+            </div>` : ''}
             <div style="margin-left:auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
               ${[
                 ['GRUPO', allGroups, activeTicketGroup, 'setTicketGroup'],
@@ -1903,6 +1914,16 @@
     };
     window.setTicketPeriod = function(p) {
       activeTicketPeriod = p;
+      render();
+    };
+    window.setTicketDateFrom = function(d) {
+      ticketDateFrom = d;
+      activeTicketPeriod = 'rango';
+      render();
+    };
+    window.setTicketDateTo = function(d) {
+      ticketDateTo = d;
+      activeTicketPeriod = 'rango';
       render();
     };
     window.setTicketNivel = function(v) {
