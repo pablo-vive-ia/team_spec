@@ -161,7 +161,18 @@ URLs:
 - https://n8n.vive-ia.com/workflow/bbnieKNegHRGrfvF
 - https://n8n.vive-ia.com/workflow/SjD5aAOWywPS92eM
 
-> **Nota:** El workflow de Telegram sigue activo en n8n y escribe en Supabase. El frontend ya no muestra datos específicos de Telegram (se eliminó la lógica de `telegram_voice` del frontend).
+> **Nota:** El workflow de Telegram sigue activo en n8n y escribe en Supabase. El frontend ya no muestra datos específicos de Telegram (se eliminó la lógica de `telegram_voice` del frontend). **⚠️ A verificar (2026-10-19):** al auditar por MCP, `SjD5aAOWywPS92eM` respondió "no encontrado / sin permiso" y no aparece buscando por nombre ni por descripción — puede haberse borrado/renombrado o no estar expuesto a MCP. Si se confirma que ya no existe, sacar la fila de la tabla y la sección "Telegram Workflow — Detalles".
+
+### Alerta de fallos de los syncs (2026-10-19)
+
+Workflow `Alerta fallos - Syncs Dashboard` (`asci4D2EIDb1Zms0`, carpeta SPEC, tag PRD): **Error Trigger → "Armar aviso" (Code) → Telegram**. Manda un mensaje a Pablo con el nombre del workflow, el nodo que falló, el mensaje de error y el link a la ejecución. Es el `errorWorkflow` de `zoho-projects-sync-supabase` y `zammad-sync-supabase`.
+
+- **Canal:** bot `Pablo_Asistente` (credencial `b3s9LWVs7UIG0UlY`) → chat privado de Pablo `7014749610` — el mismo par que ya usa el workflow "VIVE-IA - Formulario de Contacto v2" para avisarle fallos.
+- **Por qué se creó:** el corte del 22/09–19/10 (ver "Incidente 2026-10-19") duró ~4 semanas sin que nadie se enterara. Esos workflows apuntaban a `registros_errores` (`sk9H8ZrIDu0qAtwK`, genérico, tag TEST, **no expuesto a MCP** así que no se pudo auditar qué hace), que en la práctica no avisaba. **El setting `errorWorkflow` admite UN solo workflow**: al apuntar los syncs a la alerta nueva, dejaron de reportar a `registros_errores`. Para revertir: `setWorkflowSettings { errorWorkflow: "sk9H8ZrIDu0qAtwK" }` en cada uno.
+- **Comportamiento:** avisa en cada corrida fallida — con el cron cada 4 h, una falla persistente genera ≈6 avisos por día hasta que se arregle (a propósito: que no se pierda). Los timeouts transitorios de Supabase (ej. el 12/09) también van a avisar.
+- **Cómo se probó (receta):** un workflow con Error Trigger **no se puede ejecutar a mano por MCP** ("no trigger that can be executed in manual mode"), y `test_workflow` pinnea los nodos con credencial (no manda nada real). Prueba real: workflow descartable con Schedule Trigger + Code que hace `throw`, `errorWorkflow` apuntando a la alerta, publicado y corrido con `executionMode: "production"` (los manuales **no** disparan el error workflow) → la alerta corrió 0,6 s después y Telegram confirmó la entrega (`ok: true`). El descartable se archivó.
+- **No cubre:** un sync que **no corre** (workflow desactivado, n8n caído, cron roto) — el Error Trigger solo salta cuando una ejecución arranca y falla. Para eso haría falta un "watchdog" aparte que compare el `max(updated_at)` de las tablas contra la hora actual.
+- Gotcha de edición: `errorWorkflow` es un setting del workflow, no de la versión — `publish_workflow` devuelve el mismo `activeVersionId` y aun así queda efectivo (verificado con `get_workflow_details`).
 
 ## Current Status
 
