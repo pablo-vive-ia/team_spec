@@ -170,7 +170,7 @@ URLs:
 - `logo.png` — ✅ en raíz del proyecto.
 - Supabase MCP — ✅ configurado en `.mcp.json` (`osnttxgmsfudghinxfat`).
 - n8n MCP — ✅ configurado en `.mcp.json` via HTTP transport (`https://n8n.vive-ia.com/mcp-server/http`).
-- `zoho-projects-sync-supabase` — ✅ funcionando. Proyectos y pedidos sincronizando (conteos varían con el tiempo, ver Supabase para el número actual). Cron 4h activo. Comparación case-insensitive. Paginación milestones cubre índices 1–601. Mayoría de proyectos activos con `next_step`.
+- `zoho-projects-sync-supabase` — ✅ funcionando (recuperado el 2026-10-19 tras ~4 semanas caído, ver "Incidente 2026-10-19"). Proyectos, pedidos y actividades sincronizando (conteos varían con el tiempo, ver Supabase para el número actual). Cron 4h activo (a los :30 de cada 4ta hora, desde que se editó el 21/09). Comparación case-insensitive. Paginación milestones cubre índices 1–601. Mayoría de proyectos activos con `next_step`.
 - `telegram-status-update` — ✅ activo y testeado. Crea Y actualiza instalaciones. Credencial: `Team_Spec` (Telegram API).
 - `zammad-sync-supabase` — ✅ activo y sincronizando (contradice la nota vieja de "credencial no creada" — la credencial `Zammad API` ya existía y el workflow lleva corriendo un buen tiempo; 3.201 tickets en Supabase al 2026-09-03, desde el 27/01/2022 — no desde 2018 como decía una nota vieja, verificado por SQL directo). Ampliado el 2026-08-04: además de abiertos/nuevos/pendientes, trae tickets cerrados en los últimos 7 días con su estado real de Zammad (ver "Zammad Sync — Estado Detallado"), y excluye tickets `Interno::Pedido` (y similares) de raíz. **El filtro de período del frontend solo llega hasta "Este año"** — el histórico 2022-2025 existe en la DB pero no es accesible desde la UI del dashboard, solo consultando Supabase directo. **Fix 2026-09-17**: el campo "Producto" de Zammad ahora se toma tomando el último valor cuando llega multi-valor (ver "Fixes aplicados al workflow" abajo) — corrigió un desfasaje de conteo de tickets Abiertos entre Zammad y el dashboard (SPECManager y xTime, 1 ticket cruzado entre ambos) reportado por el usuario y verificado con SQL antes/después.
 - Netlify deploy — ✅ auto-deploy conectado al repo de GitHub (push a `master` publica solo, sin `netlify.toml`).
@@ -178,7 +178,7 @@ URLs:
 ## Zoho Sync — Estado Detallado
 
 ### Lo que funciona
-- `Fetch Proyectos Zoho` → 20 items (API v3, split automático por n8n)
+- `Fetch Proyectos Zoho` → 21 proyectos activos (API **legacy** `restapi`, un solo item `{ projects: [...] }` — migrado el 2026-10-19, ver "Incidente 2026-10-19" abajo)
 - `Normalizar Proyectos Zoho` → 20 items con team detection por grupo
 - Flujo completo de proyectos: fetch → normalizar → buscar en Supabase → comparar → crear/actualizar → log
 - `Fetch Pedidos Zoho` → endpoint `/milestones/` con scope `ZohoProjects.milestones.READ` ✅
@@ -191,6 +191,18 @@ URLs:
 - **`Preparar URL Comentarios`**: selecciona la tarea "Seguimiento" más reciente que esté abierta usando `segTasks.slice().reverse().find(openTask)` — no la primera (`tasks.find()`). Crítico para proyectos con múltiples tareas "Seguimiento" históricas (ej. RECKITT BENKISER).
 - Fallback cuando no hay "Seguimiento" abierto: última "Seguimiento" encontrada → `tasks[0]` → null
 - Proyectos sin `next_step` (esperado): ADIUM-ACCESOS no tiene tarea "Seguimiento" en Zoho; HONDA y KIMBERLY CLARCK tienen "Seguimiento" pero sin comentarios.
+
+### Incidente 2026-10-19 — Zoho dio de baja la API v3 de proyectos (sync caído ~4 semanas)
+
+**Síntoma:** la sección Actividades Equipo mostraba 0 registros en "Este mes" (reportado por el usuario). **Causa:** desde el 22/09 el workflow fallaba en cada corrida, a los ~0,3 segundos, en el primer nodo `Fetch Proyectos Zoho` (`400 URL_RULE_NOT_CONFIGURED`): Zoho dejó de servir `/api/v3/portal/.../projects`. Nadie lo vio porque el workflow no se había editado — fue un cambio del lado de Zoho.
+
+**Por qué cayó TODO y no solo proyectos:** el Cron dispara tres ramas en paralelo (proyectos, pedidos, actividades) y en n8n un error sin `onError` en cualquier nodo **aborta la ejecución completa**: el nodo de proyectos fallaba primero y las otras dos ramas quedaban en cola sin ejecutarse nunca, aunque sus propias llamadas (milestones, time logs) funcionaban perfecto. Por eso `orders`, `team_activities` y `projects` dejaron de escribir a la vez. **Lección:** un nodo fetch crítico sin `onError: continueRegularOutput` puede tumbar ramas independientes — si se agregan ramas nuevas a este workflow, evaluar ese setting o separarlas en workflows distintos.
+
+**Cómo se diagnosticó** (sirve de receta): se creó un workflow temporal con 6 nodos HTTP (solo lecturas, `neverError`) usando la credencial `Zoho_project` y se probó cada URL por separado — `test_workflow` **no sirve para esto** (pinnea los nodos HTTP, no hace pedidos reales). Resultado: v3 ❌, `restapi` projects ✅, milestones ✅, time logs ✅. El workflow temporal se archivó después.
+
+**Fix:** `Fetch Proyectos Zoho` → `restapi` (ver "Zoho API — Notas") y `Normalizar Proyectos Zoho` adaptado al formato legacy. Paridad verificada campo por campo contra lo ya guardado en Supabase (grupo, responsable, cliente, estado, %) antes de publicar. Tras publicar + correr a mano (ejecución 13829): `team_activities` 1.340 → 1.566 (123 registros de octubre), `orders` 59 → 67, `projects` 35 → 38.
+
+**Efectos colaterales esperados de la recuperación:** (1) la reconciliación de huérfanos cerró como `completado` los proyectos que se completaron/archivaron en Zoho durante el apagón (HONDA - Molinete Comedor, MEGATLON - Migración). (2) `HOLCIM MEXICO - Centro de distribución y Depósitos` quedó duplicado: Zoho le agregó tildes al nombre en el medio, y como `Comparar Proyectos` empareja **por nombre** (case-insensitive, no por `_zoho_id`), creó una fila nueva y cerró la vieja sin tildes (queda oculta, `completado`). Inofensivo para la UI, pero es una limitación conocida del match por nombre.
 
 ### Estado de proyectos — bug crítico resuelto (2026-08-31)
 Detectado porque proyectos ya completados en Zoho (ej. HONDA - Contratas Capacitacion, SECCO - QA) seguían mostrándose "En progreso · 100%" indefinidamente en el dashboard.
@@ -222,11 +234,11 @@ Los "pedidos" son **milestones** (hitos con prefijo "H-") en el proyecto GESTION
 - `Comparar Pedidos` usa `.toLowerCase()` en ambos lados para evitar duplicados por variaciones de capitalización.
 
 ### Zoho API — Notas importantes
-- **API v3** (`/api/v3/`): solo soporta `/projects`. Tasks, milestones y demás requieren formato `restapi`.
-- **Fetch Proyectos**: `GET https://projectsapi.zoho.com/api/v3/portal/grupospeclatam/projects` — devuelve array spliteado automáticamente por n8n (20 items, no wrapper).
+- **⚠️ API v3 de proyectos (`/api/v3/portal/.../projects`) está DADA DE BAJA** (verificado 2026-10-19: responde `400 URL_RULE_NOT_CONFIGURED · "Given URL is wrong"` con y sin `?status=active`). No volver a usarla. Todo el workflow usa el formato `restapi` (legacy), que sigue andando.
+- **Fetch Proyectos**: `GET https://projectsapi.zoho.com/restapi/portal/grupospeclatam/projects/?status=active&index=1&range=100` — devuelve **un solo item** `{ projects: [...] }` (no un item por proyecto como hacía v3). Mapeo de campos legacy en `Normalizar Proyectos Zoho`: `group_name` (string), `custom_status_name` (estado real: "Activo"/"En curso"/…; `status` a secas vale siempre `"active"`), `project_percent` (string), `owner_name`, `id_string` (usar este, `id` pierde precisión por ser float), y el **cliente va dentro de `custom_fields`**: `[{ "CLIENTE": "..." }, ...]`. El normalizador acepta también el formato v3 por si Zoho vuelve a cambiar.
 - **Fetch Pedidos**: `GET https://projectsapi.zoho.com/restapi/portal/grupospeclatam/projects/1972504000000679075/milestones/`
 - **Portal**: `grupospeclatam` | **Proyecto GESTION_PEDIDOS ID**: `1972504000000679075`
-- Parámetros `?status=active` y `?status=open` dan error 400 en ambos endpoints — no usar.
+- Parámetros `?status=active` / `?status=open`: la nota vieja decía que daban 400 en ambos endpoints — **ya no es cierto para `restapi/.../projects/`**: `?status=active` funciona (verificado 2026-10-19, y sin el parámetro devuelve el mismo set de 21 activos; `?status=archived` lista los archivados aparte, 100+). Sigue sin servir en milestones.
 
 ### Actividades Equipo — Time Logs de Zoho
 
