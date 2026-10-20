@@ -14,6 +14,7 @@
   </script>
 
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script>
     tailwind.config = {
       theme: { extend: { fontFamily: { sans: ['Geist', 'system-ui', 'sans-serif'] } } }
@@ -837,9 +838,9 @@
             </div>
             <span style="font-size:11px;color:var(--t3)">${filtered.length} mostrados · ${D.projects.length} total</span>
             <div style="margin-left:auto;display:flex;gap:6px">
-              <button onclick="exportProyectosCSV()" title="Exportar a CSV / Excel" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(16,185,129,0.18)'" onmouseout="this.style.background='rgba(16,185,129,0.08)'">
+              <button onclick="exportProyectosExcel()" title="Exportar a Excel (.xlsx)" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(16,185,129,0.18)'" onmouseout="this.style.background='rgba(16,185,129,0.08)'">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                CSV
+                Excel
               </button>
               <button onclick="exportProyectosPDF()" title="Exportar a PDF / Imprimir" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:#FCA5A5;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(239,68,68,0.18)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
@@ -1253,9 +1254,9 @@
                 style="margin-left:auto;border-radius:8px;padding:5px 12px;font-size:12px;color:var(--t1);background:var(--row-b);border:1px solid var(--pill-br);min-width:170px;font-family:inherit;transition:border-color 0.15s;outline:none"
                 onfocus="this.style.borderColor='rgba(59,107,247,0.4)'" onblur="this.style.borderColor=''">
               <div style="display:flex;align-items:center;gap:6px">
-                <button onclick="exportTicketsCSV()" title="Exportar a CSV / Excel" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(16,185,129,0.18)'" onmouseout="this.style.background='rgba(16,185,129,0.08)'">
+                <button onclick="exportTicketsExcel()" title="Exportar a Excel (.xlsx)" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(16,185,129,0.18)'" onmouseout="this.style.background='rgba(16,185,129,0.08)'">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  CSV
+                  Excel
                 </button>
                 <button onclick="exportTicketsPDF()" title="Exportar a PDF / Imprimir" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:#FCA5A5;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(239,68,68,0.18)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
@@ -1335,9 +1336,9 @@
               <span style="font-size:11px;color:var(--t3)">completados (ocultos)</span>
             </div>
             <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
-              <button onclick="exportPedidosCSV()" title="Exportar a CSV / Excel" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(16,185,129,0.18)'" onmouseout="this.style.background='rgba(16,185,129,0.08)'">
+              <button onclick="exportPedidosExcel()" title="Exportar a Excel (.xlsx)" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(16,185,129,0.18)'" onmouseout="this.style.background='rgba(16,185,129,0.08)'">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                CSV
+                Excel
               </button>
               <button onclick="exportPedidosPDF()" title="Exportar a PDF / Imprimir" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:#FCA5A5;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(239,68,68,0.18)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
@@ -2006,12 +2007,28 @@
       if (el) { el.focus(); el.setSelectionRange(v.length, v.length); }
     };
 
-    window.exportTicketsCSV = function() {
+    // Descarga un .xlsx real (SheetJS). Celdas string se quedan string (ej. el nº de
+    // ticket de Zammad, 15 dígitos, que Excel redondearía si lo tomara como número).
+    function downloadXlsx(filename, sheetName, headers, rows) {
+      if (!window.XLSX) { alert('No se pudo cargar la librería de Excel — recargá la página e intentá de nuevo.'); return; }
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      ws['!cols'] = headers.map((h, i) => {
+        const longest = Math.max(String(h).length, ...rows.map(r => String(r[i] ?? '').length));
+        return { wch: Math.min(Math.max(longest + 2, 8), 60) };
+      });
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      XLSX.writeFile(wb, filename);
+    }
+    // Número de ticket tal como lo muestra Zammad (zammad_number); fallback al id interno.
+    const ticketNum = t => t.zammad_number ? String(t.zammad_number) : (t.zammad_id ? String(t.zammad_id) : '');
+
+    window.exportTicketsExcel = function() {
       const data = window._ticketExportData || [];
       const fmtWork = min => { const m=parseFloat(min)||0; if(!m) return ''; const h=Math.floor(m/60); const r=Math.round(m%60); return h>0?`${h}h ${r}m`:`${r}m`; };
       const headers = ['#','T. Trabajo','Creado','Título','Producto','Organización','Prioridad','Estado','Nivel','Propietario','Último Comentario'];
       const rows = data.map(t => [
-        t.zammad_id || '',
+        ticketNum(t),
         fmtWork(t.time_unit),
         fmtDate(t.created_at) || '',
         t.title || '',
@@ -2023,16 +2040,7 @@
         t.owner || '',
         fmtDate(t.last_contact_at) || ''
       ]);
-      const csv = [headers, ...rows]
-        .map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))
-        .join('\n');
-      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `tickets_${new Date().toISOString().slice(0,10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadXlsx(`tickets_${new Date().toISOString().slice(0,10)}.xlsx`, 'Tickets', headers, rows);
     };
 
     window.exportTicketsPDF = function() {
@@ -2043,7 +2051,7 @@
         const daysOld = t.last_contact_at ? (Date.now() - new Date(t.last_contact_at)) / 86400000 : 999;
         const isStale = daysOld > 5;
         return `<tr class="${isStale ? 'stale' : ''}">
-          <td>#${escP(t.zammad_id)}</td>
+          <td style="white-space:nowrap">${escP(ticketNum(t))}</td>
           <td style="white-space:nowrap">${fmtWork(t.time_unit)}</td>
           <td style="white-space:nowrap">${escP(fmtDate(t.created_at))}</td>
           <td>${escP(t.title)}</td>
@@ -2142,7 +2150,7 @@
       );
     };
 
-    window.exportProyectosCSV = function() {
+    window.exportProyectosExcel = function() {
       const data = window._proyectosExportData || [];
       const headers = ['Proyecto','Grupo','Estado','Avance %','Próximo Paso','Actualizado'];
       const rows = data.map(p => [
@@ -2153,16 +2161,7 @@
         p.next_step || '',
         fmtDate(p.updated_at) || ''
       ]);
-      const csv = [headers, ...rows]
-        .map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))
-        .join('\n');
-      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `proyectos_${new Date().toISOString().slice(0,10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadXlsx(`proyectos_${new Date().toISOString().slice(0,10)}.xlsx`, 'Proyectos', headers, rows);
     };
 
     window.exportProyectosPDF = function() {
@@ -2207,7 +2206,7 @@
       win.document.close();
     };
 
-    window.exportPedidosCSV = function() {
+    window.exportPedidosExcel = function() {
       const data = window._pedidosExportData || [];
       const headers = ['Pedido','Cliente','Estado','Avance %','Fuente','Actualizado'];
       const rows = data.map(o => [
@@ -2218,16 +2217,7 @@
         o.source || '',
         fmtDate(o.updated_at) || ''
       ]);
-      const csv = [headers, ...rows]
-        .map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))
-        .join('\n');
-      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `pedidos_${new Date().toISOString().slice(0,10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadXlsx(`pedidos_${new Date().toISOString().slice(0,10)}.xlsx`, 'Pedidos', headers, rows);
     };
 
     window.exportPedidosPDF = function() {
@@ -2689,8 +2679,8 @@
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:12px">
           <p class="sec-label" style="color:var(--t3);margin:0">PLANIFICACIÓN DEL EQUIPO</p>
           <div style="display:flex;align-items:center;gap:6px">
-            <button onclick="exportTareasCSV()" title="Exportar a CSV / Excel" style="display:flex;align-items:center;gap:5px;padding:5px 11px;border-radius:8px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(16,185,129,0.18)'" onmouseout="this.style.background='rgba(16,185,129,0.08)'">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV
+            <button onclick="exportTareasExcel()" title="Exportar a Excel (.xlsx)" style="display:flex;align-items:center;gap:5px;padding:5px 11px;border-radius:8px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(16,185,129,0.18)'" onmouseout="this.style.background='rgba(16,185,129,0.08)'">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Excel
             </button>
             <button onclick="exportTareasPDF()" title="Exportar a PDF / Imprimir" style="display:flex;align-items:center;gap:5px;padding:5px 11px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:#FCA5A5;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(239,68,68,0.18)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>PDF
@@ -3026,20 +3016,12 @@
       });
     }
 
-    window.exportTareasCSV = function() {
+    window.exportTareasExcel = function() {
       const d    = window._tareasExportData || { ws:new Date(), we:new Date() };
       const rows = tareasExportRows();
       const headers = ['Responsable','Tarea','Próximo Paso','Prioridad','Estado','Vence','Origen'];
-      const csv = [headers, ...rows.map(r => [r.responsable, r.title, r.next_step, r.priority, r.status, r.due, r.origen])]
-        .map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))
-        .join('\n');
-      const blob = new Blob(['﻿' + csv], { type:'text/csv;charset=utf-8;' });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href = url;
-      a.download = `tareas_semana_${ymd(d.ws)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadXlsx(`tareas_semana_${ymd(d.ws)}.xlsx`, 'Tareas', headers,
+        rows.map(r => [r.responsable, r.title, r.next_step, r.priority, r.status, r.due, r.origen]));
     };
 
     window.exportTareasPDF = function() {
@@ -3270,9 +3252,9 @@
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
           <p class="sec-label" style="color:var(--t3);margin:0">ACTIVIDADES EQUIPO</p>
           <div style="display:flex;gap:6px">
-            <button onclick="exportActividadesCSV()" title="Exportar a CSV / Excel" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(16,185,129,0.18)'" onmouseout="this.style.background='rgba(16,185,129,0.08)'">
+            <button onclick="exportActividadesExcel()" title="Exportar a Excel (.xlsx)" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.08);color:#6EE7B7;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(16,185,129,0.18)'" onmouseout="this.style.background='rgba(16,185,129,0.08)'">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              CSV
+              Excel
             </button>
             <button onclick="exportActividadesPDF()" title="Exportar a PDF / Imprimir" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:#FCA5A5;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(239,68,68,0.18)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
@@ -3387,26 +3369,18 @@
       render();
     };
 
-    window.exportActividadesCSV = function() {
+    window.exportActividadesExcel = function() {
       const data = window._actividadesExportData || [];
       const headers = ['Fecha','Técnico','Categoría','Horas','Notas'];
+      // Horas como número decimal (no "h:mm") para poder sumar/promediar en Excel
       const rows = data.map(act => [
         act.log_date || '',
         act.user_name || '',
         act.activity || '',
-        fmtHours(act.hours),
+        Math.round((act.hours || 0) * 100) / 100,
         act.notes || ''
       ]);
-      const csv = [headers, ...rows]
-        .map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))
-        .join('\n');
-      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `actividades_equipo_${new Date().toISOString().slice(0,10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadXlsx(`actividades_equipo_${new Date().toISOString().slice(0,10)}.xlsx`, 'Actividades', headers, rows);
     };
 
     window.exportActividadesPDF = function() {
